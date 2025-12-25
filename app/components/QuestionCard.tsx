@@ -27,6 +27,11 @@ export function QuestionCard({
     selectedAnswer !== undefined && mode === "learning"
   );
   const [justFlagged, setJustFlagged] = useState(false);
+  const [generatedExplanation, setGeneratedExplanation] = useState<
+    string | null
+  >(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const handleFlag = () => {
     if (onFlagQuestion) {
@@ -34,6 +39,40 @@ export function QuestionCard({
       setJustFlagged(true);
     }
   };
+
+  const handleGenerateExplanation = async () => {
+    setIsGenerating(true);
+    setGenerateError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("questionId", question.id.toString());
+
+      const response = await fetch("/api/generate-explanation", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate explanation");
+      }
+
+      setGeneratedExplanation(data.explanation);
+    } catch (error) {
+      setGenerateError(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate explanation"
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Use generated explanation if available, otherwise use the question's explanation
+  const displayExplanation = generatedExplanation || question.explanation;
 
   const handleSelect = (index: number) => {
     if (mode === "learning" && hasAnswered) return;
@@ -150,7 +189,7 @@ export function QuestionCard({
       </div>
 
       {/* Explanation - show after answering in learning mode or in review */}
-      {shouldShowResult && question.explanation && (
+      {shouldShowResult && displayExplanation && (
         <div
           className={`mt-4 sm:mt-5 p-4 sm:p-3 rounded-xl sm:rounded-lg border text-sm ${
             isCorrect
@@ -177,8 +216,70 @@ export function QuestionCard({
             </span>
           </div>
           <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 leading-relaxed [&>p]:my-2 [&>ul]:my-2 [&>ol]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&_strong]:text-slate-800 dark:[&_strong]:text-slate-100 [&_li]:my-0.5 [&_ul]:pl-4 [&_ol]:pl-4">
-            <Markdown>{question.explanation}</Markdown>
+            <Markdown>{displayExplanation}</Markdown>
           </div>
+        </div>
+      )}
+
+      {/* Generate explanation button - show when no explanation exists */}
+      {shouldShowResult && !displayExplanation && (
+        <div className="mt-4 sm:mt-5">
+          {generateError && (
+            <div className="mb-3 p-3 rounded-lg bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-600 dark:text-error-400">
+              {generateError}
+            </div>
+          )}
+          <button
+            onClick={handleGenerateExplanation}
+            disabled={isGenerating}
+            className={`w-full py-3 px-4 rounded-xl border-2 border-dashed transition-all flex items-center justify-center gap-2 text-sm font-medium ${
+              isGenerating
+                ? "border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400 cursor-wait"
+                : "border-primary-300 dark:border-primary-700 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-primary-600 dark:text-primary-400"
+            }`}
+          >
+            {isGenerating ? (
+              <>
+                <svg
+                  className="w-5 h-5 animate-spin"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                Generating explanation...
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+                Generate explanation
+              </>
+            )}
+          </button>
         </div>
       )}
 

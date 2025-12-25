@@ -7,4 +7,5 @@ export default [
   route("test/:sessionId", "routes/test.tsx"),
   route("learn/:sessionId", "routes/learn.tsx"),
   route("review/:sessionId", "routes/review.tsx"),
+  route("api/generate-explanation", "routes/api.generate-explanation.tsx"),
 ] satisfies RouteConfig;
