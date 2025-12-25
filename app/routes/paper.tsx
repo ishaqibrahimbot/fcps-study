@@ -7,10 +7,7 @@ import type { Route } from "./+types/paper";
 export async function loader({ params }: Route.LoaderArgs) {
   const paperId = parseInt(params.paperId);
 
-  const [paper] = await db
-    .select()
-    .from(papers)
-    .where(eq(papers.id, paperId));
+  const [paper] = await db.select().from(papers).where(eq(papers.id, paperId));
 
   if (!paper) {
     throw new Response("Paper not found", { status: 404 });
@@ -21,6 +18,15 @@ export async function loader({ params }: Route.LoaderArgs) {
     .from(questions)
     .where(eq(questions.paperId, paperId))
     .orderBy(questions.orderIndex);
+
+  // Count incomplete questions (empty choices or invalid correct choice)
+  const incompleteCount = questionList.filter(
+    (q) =>
+      q.choices.length === 0 ||
+      q.correctChoice === null ||
+      q.correctChoice < 0 ||
+      q.correctChoice >= q.choices.length
+  ).length;
 
   const sessions = await db
     .select()
@@ -34,6 +40,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   return {
     paper,
     questionCount: questionList.length,
+    incompleteCount,
     inProgressSession,
     completedSessions,
   };
@@ -52,7 +59,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       .select()
       .from(testSessions)
       .where(eq(testSessions.id, sessionId));
-    
+
     if (session) {
       const routePath = session.mode === "learning" ? "learn" : session.mode;
       return redirect(`/${routePath}/${session.id}`);
@@ -60,10 +67,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   // Create new session
-  const [paper] = await db
-    .select()
-    .from(papers)
-    .where(eq(papers.id, paperId));
+  const [paper] = await db.select().from(papers).where(eq(papers.id, paperId));
 
   // Default time: 1 minute per question for test mode
   const timeRemaining = mode === "test" ? paper.questionCount * 60 : null;
@@ -87,13 +91,22 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 export function meta({ data }: Route.MetaArgs) {
   return [
-    { title: data?.paper ? `${data.paper.name} - FCPS Study` : "Paper - FCPS Study" },
+    {
+      title: data?.paper
+        ? `${data.paper.name} - FCPS Study`
+        : "Paper - FCPS Study",
+    },
   ];
 }
 
 export default function Paper() {
-  const { paper, questionCount, inProgressSession, completedSessions } =
-    useLoaderData<typeof loader>();
+  const {
+    paper,
+    questionCount,
+    incompleteCount,
+    inProgressSession,
+    completedSessions,
+  } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   const bestScore =
@@ -168,6 +181,58 @@ export default function Paper() {
           </div>
         </div>
 
+        {/* Incomplete questions warning */}
+        {incompleteCount > 0 && (
+          <div className="bg-error-50 dark:bg-error-900/20 border border-error-500/30 rounded-2xl p-6 mb-8">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-error-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg
+                  className="w-5 h-5 text-error-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
+                  {incompleteCount} Incomplete Question
+                  {incompleteCount > 1 ? "s" : ""}
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
+                  Some questions are missing choices or have invalid answers due
+                  to OCR issues. You can fix them manually.
+                </p>
+                <Link
+                  to={`/paper/${paper.id}/fix`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-error-500 hover:bg-error-600 text-white font-medium rounded-xl transition-colors text-sm"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                  Fix Manually
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Resume in-progress session */}
         {inProgressSession && (
           <div className="bg-warning-500/10 border border-warning-500/20 rounded-2xl p-6 mb-8">
@@ -196,14 +261,13 @@ export default function Paper() {
                   <span className="font-medium capitalize">
                     {inProgressSession.mode}
                   </span>{" "}
-                  session. Question{" "}
-                  {inProgressSession.currentQuestionIndex + 1} of {questionCount}
+                  session. Question {inProgressSession.currentQuestionIndex + 1}{" "}
+                  of {questionCount}
                   {inProgressSession.mode === "test" &&
                     inProgressSession.timeRemaining && (
                       <span>
                         {" "}
-                        •{" "}
-                        {Math.floor(inProgressSession.timeRemaining / 60)} min
+                        • {Math.floor(inProgressSession.timeRemaining / 60)} min
                         remaining
                       </span>
                     )}
@@ -334,7 +398,8 @@ export default function Paper() {
                           : "bg-error-100 dark:bg-error-900/40 text-error-600 dark:text-error-400"
                       }`}
                     >
-                      {Math.round(((session.score || 0) / questionCount) * 100)}%
+                      {Math.round(((session.score || 0) / questionCount) * 100)}
+                      %
                     </div>
                     <div>
                       <p className="font-medium text-slate-900 dark:text-white capitalize">
@@ -358,4 +423,3 @@ export default function Paper() {
     </div>
   );
 }
-

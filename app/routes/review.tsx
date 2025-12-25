@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useLoaderData, useSearchParams, Link } from "react-router";
+import { useState, useCallback } from "react";
+import { useLoaderData, useSearchParams, Link, useFetcher } from "react-router";
 import { db } from "~/db";
 import { papers, questions, testSessions } from "~/db/schema";
 import { eq } from "drizzle-orm";
@@ -36,6 +36,22 @@ export async function loader({ params }: Route.LoaderArgs) {
   };
 }
 
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const actionType = formData.get("_action");
+
+  if (actionType === "flag") {
+    const questionId = parseInt(formData.get("questionId") as string);
+    await db
+      .update(questions)
+      .set({ flagged: true })
+      .where(eq(questions.id, questionId));
+    return { success: true, flagged: true };
+  }
+
+  return { success: false };
+}
+
 export function meta({ data }: Route.MetaArgs) {
   return [
     {
@@ -49,15 +65,32 @@ export function meta({ data }: Route.MetaArgs) {
 type FilterType = "all" | "correct" | "wrong";
 
 export default function ReviewMode() {
-  const { session, paper, questions: questionList } =
-    useLoaderData<typeof loader>();
+  const {
+    session,
+    paper,
+    questions: questionList,
+  } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
+  const fetcher = useFetcher();
 
   const initialFilter = (searchParams.get("filter") as FilterType) || "all";
   const [filter, setFilter] = useState<FilterType>(initialFilter);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const answers = (session.answers as Record<number, number>) || {};
+
+  const handleFlagQuestion = useCallback(
+    (questionId: number) => {
+      fetcher.submit(
+        {
+          _action: "flag",
+          questionId: questionId.toString(),
+        },
+        { method: "post" }
+      );
+    },
+    [fetcher]
+  );
 
   // Filter questions based on selected filter
   const filteredQuestions = questionList.filter((question) => {
@@ -309,6 +342,7 @@ export default function ReviewMode() {
             onSelectAnswer={() => {}} // Read-only in review mode
             showResult={true}
             mode="learning"
+            onFlagQuestion={handleFlagQuestion}
           />
         </div>
 
@@ -364,4 +398,3 @@ export default function ReviewMode() {
     </div>
   );
 }
-

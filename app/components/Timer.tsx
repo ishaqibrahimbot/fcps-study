@@ -61,9 +61,12 @@ export function Timer({
   };
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="relative w-12 h-12">
-        <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div className="relative w-10 h-10 sm:w-12 sm:h-12">
+        <svg
+          className="w-10 h-10 sm:w-12 sm:h-12 transform -rotate-90"
+          viewBox="0 0 36 36"
+        >
           <path
             className="text-slate-200 dark:text-slate-700"
             stroke="currentColor"
@@ -78,8 +81,8 @@ export function Timer({
               seconds <= 60
                 ? "text-error-500"
                 : seconds <= 300
-                ? "text-warning-500"
-                : "text-primary-500"
+                  ? "text-warning-500"
+                  : "text-primary-500"
             } transition-colors`}
             stroke="currentColor"
             strokeWidth="3"
@@ -93,7 +96,7 @@ export function Timer({
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <svg
-            className={`w-5 h-5 ${getTimerColor()}`}
+            className={`w-4 h-4 sm:w-5 sm:h-5 ${getTimerColor()}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -108,12 +111,15 @@ export function Timer({
         </div>
       </div>
       <div>
-        <p className={`text-xl font-mono font-bold ${getTimerColor()}`}>
+        <p
+          className={`text-lg sm:text-xl font-mono font-bold ${getTimerColor()}`}
+        >
           {formatTime(seconds)}
         </p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">remaining</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
+          remaining
+        </p>
       </div>
     </div>
   );
 }
-

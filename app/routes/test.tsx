@@ -1,10 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import {
-  useLoaderData,
-  useNavigate,
-  useFetcher,
-  Link,
-} from "react-router";
+import { useLoaderData, useNavigate, useFetcher, Link } from "react-router";
 import { db } from "~/db";
 import { papers, questions, testSessions } from "~/db/schema";
 import { eq } from "drizzle-orm";
@@ -103,6 +98,15 @@ export async function action({ request, params }: Route.ActionArgs) {
     return { success: true, completed: true, score };
   }
 
+  if (actionType === "flag") {
+    const questionId = parseInt(formData.get("questionId") as string);
+    await db
+      .update(questions)
+      .set({ flagged: true })
+      .where(eq(questions.id, questionId));
+    return { success: true, flagged: true };
+  }
+
   return { success: false };
 }
 
@@ -117,8 +121,11 @@ export function meta({ data }: Route.MetaArgs) {
 }
 
 export default function TestMode() {
-  const { session, paper, questions: questionList } =
-    useLoaderData<typeof loader>();
+  const {
+    session,
+    paper,
+    questions: questionList,
+  } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
@@ -217,6 +224,19 @@ export default function TestMode() {
     }
   };
 
+  const handleFlagQuestion = useCallback(
+    (questionId: number) => {
+      fetcher.submit(
+        {
+          _action: "flag",
+          questionId: questionId.toString(),
+        },
+        { method: "post" }
+      );
+    },
+    [fetcher]
+  );
+
   // Show results screen
   if (showResults) {
     return (
@@ -229,9 +249,7 @@ export default function TestMode() {
               ? (session.timeRemaining || 0) - timeRemaining
               : undefined
           }
-          onReviewWrong={() =>
-            navigate(`/review/${session.id}?filter=wrong`)
-          }
+          onReviewWrong={() => navigate(`/review/${session.id}?filter=wrong`)}
           onReviewAll={() => navigate(`/review/${session.id}`)}
           onBackToHome={() => navigate("/")}
         />
@@ -289,12 +307,12 @@ export default function TestMode() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Header */}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <button
                 onClick={handlePause}
-                className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors flex-shrink-0"
                 title="Pause test"
               >
                 <svg
@@ -311,11 +329,11 @@ export default function TestMode() {
                   />
                 </svg>
               </button>
-              <div>
-                <h1 className="font-semibold text-slate-900 dark:text-white">
+              <div className="min-w-0">
+                <h1 className="font-semibold text-slate-900 dark:text-white text-sm sm:text-base truncate">
                   {paper.name}
                 </h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
                   Test Mode
                 </p>
               </div>
@@ -330,9 +348,9 @@ export default function TestMode() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-4">
+      <main className="max-w-5xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         {/* Progress */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800 mb-4">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-4 border border-slate-200 dark:border-slate-800 mb-3 sm:mb-4">
           <ProgressBar
             current={currentIndex + 1}
             total={questionList.length}
@@ -342,7 +360,7 @@ export default function TestMode() {
         </div>
 
         {/* Question */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 mb-6">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 mb-4 sm:mb-6">
           <QuestionCard
             key={currentQuestion.id}
             question={currentQuestion}
@@ -352,15 +370,16 @@ export default function TestMode() {
             onSelectAnswer={handleSelectAnswer}
             showResult={false}
             mode="test"
+            onFlagQuestion={handleFlagQuestion}
           />
         </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between">
+        {/* Navigation - stacks on mobile */}
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0">
           <button
             onClick={() => handleNavigate(currentIndex - 1)}
             disabled={currentIndex === 0}
-            className="px-6 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-colors flex items-center gap-2"
+            className="px-5 sm:px-6 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 dark:active:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 font-medium rounded-xl transition-colors flex items-center justify-center gap-2 touch-manipulation"
           >
             <svg
               className="w-4 h-4"
@@ -381,14 +400,14 @@ export default function TestMode() {
           {currentIndex === questionList.length - 1 ? (
             <button
               onClick={handleSubmit}
-              className="px-8 py-3 bg-success-500 hover:bg-success-600 text-white font-medium rounded-xl transition-colors"
+              className="px-6 sm:px-8 py-3 bg-success-500 hover:bg-success-600 active:bg-success-700 text-white font-medium rounded-xl transition-colors text-center touch-manipulation"
             >
               Submit Test
             </button>
           ) : (
             <button
               onClick={() => handleNavigate(currentIndex + 1)}
-              className="px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition-colors flex items-center gap-2"
+              className="px-5 sm:px-6 py-3 bg-primary-500 hover:bg-primary-600 active:bg-primary-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2 touch-manipulation"
             >
               Next
               <svg
@@ -411,4 +430,3 @@ export default function TestMode() {
     </div>
   );
 }
-

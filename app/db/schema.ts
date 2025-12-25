@@ -5,6 +5,7 @@ import {
   integer,
   timestamp,
   jsonb,
+  boolean,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -28,6 +29,7 @@ export const questions = pgTable("questions", {
   correctChoice: integer("correct_choice").notNull(), // Index of correct choice (0-based)
   explanation: text("explanation"), // Can be null if not available
   orderIndex: integer("order_index").notNull(), // Order within the paper
+  flagged: boolean("flagged").default(false).notNull(), // Flagged as inaccurate by user
 });
 
 // Test sessions - tracks user progress through papers
@@ -39,7 +41,10 @@ export const testSessions = pgTable("test_sessions", {
   mode: text("mode").notNull().$type<"test" | "learning">(),
   status: text("status").notNull().$type<"in_progress" | "completed">(),
   currentQuestionIndex: integer("current_question_index").notNull().default(0),
-  answers: jsonb("answers").$type<Record<number, number>>().notNull().default({}), // questionId -> selectedChoice
+  answers: jsonb("answers")
+    .$type<Record<number, number>>()
+    .notNull()
+    .default({}), // questionId -> selectedChoice
   score: integer("score"), // null until completed
   timeRemaining: integer("time_remaining"), // in seconds, for test mode
   startedAt: timestamp("started_at").defaultNow().notNull(),
@@ -75,4 +80,3 @@ export type NewQuestion = typeof questions.$inferInsert;
 
 export type TestSession = typeof testSessions.$inferSelect;
 export type NewTestSession = typeof testSessions.$inferInsert;
-
