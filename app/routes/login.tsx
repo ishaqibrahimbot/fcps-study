@@ -9,10 +9,10 @@ import {
 } from "~/lib/auth.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  // If already logged in, redirect to home
+  // If already logged in, redirect to dashboard
   const session = await getSession(request);
   if (session?.userId) {
-    return redirect("/");
+    return redirect("/dashboard");
   }
 
   // Google OAuth is not currently implemented for React Router
@@ -26,7 +26,7 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
-  const redirectTo = (formData.get("redirectTo") as string) || "/";
+  const redirectTo = (formData.get("redirectTo") as string) || "/dashboard";
 
   if (!email || !password) {
     return { error: "Email and password are required" };
@@ -52,7 +52,7 @@ export default function LoginPage({
 }: Route.ComponentProps) {
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/";
+  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
   const registered = searchParams.get("registered");
   const verified = searchParams.get("verified");
   const reset = searchParams.get("reset");

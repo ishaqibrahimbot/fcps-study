@@ -9,10 +9,10 @@ import { users, verificationTokens } from "~/db/schema";
 import { sendVerificationEmail, generateToken } from "~/lib/email.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
-  // If already logged in, redirect to home
+  // If already logged in, redirect to dashboard
   const session = await getSession(request);
   if (session?.userId) {
-    return redirect("/");
+    return redirect("/dashboard");
   }
 
   // Google OAuth is not currently implemented for React Router
@@ -88,7 +88,7 @@ export default function SignupPage({
 }: Route.ComponentProps) {
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/";
+  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
 
   const isSubmitting = navigation.state === "submitting";
 

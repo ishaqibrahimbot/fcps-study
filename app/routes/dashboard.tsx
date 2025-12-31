@@ -2,7 +2,7 @@ import { Link, useLoaderData, Form, redirect } from "react-router";
 import { db } from "~/db";
 import { papers, testSessions } from "~/db/schema";
 import { desc, eq } from "drizzle-orm";
-import type { Route } from "./+types/home";
+import type { Route } from "./+types/dashboard";
 import { requireAuth } from "~/lib/require-auth.server";
 import { createLogoutCookie } from "~/lib/auth.server";
 import { canAccessPaper } from "~/lib/access-control.server";
@@ -80,12 +80,12 @@ export async function action({ request }: Route.ActionArgs) {
 
 export function meta() {
   return [
-    { title: "FCPS Study App" },
+    { title: "Dashboard - FCPS Study" },
     { name: "description", content: "Practice for FCPS Part I examinations" },
   ];
 }
 
-export default function Home() {
+export default function Dashboard() {
   const { papers, user } = useLoaderData<typeof loader>();
 
   const accessiblePapers = papers.filter((p) => p.hasAccess);
@@ -97,8 +97,8 @@ export default function Home() {
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-4 sm:py-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center flex-shrink-0">
+            <Link to="/dashboard" className="flex items-center gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shrink-0">
                 <svg
                   className="w-5 h-5 sm:w-6 sm:h-6 text-white"
                   fill="none"
@@ -121,7 +121,7 @@ export default function Home() {
                   Practice Makes Perfect
                 </p>
               </div>
-            </div>
+            </Link>
 
             {/* User menu */}
             <div className="flex items-center gap-3">
@@ -326,7 +326,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div
-                    className={`flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors ${
+                    className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors ${
                       paper.hasAccess
                         ? "bg-slate-100 dark:bg-slate-800 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/40"
                         : "bg-amber-100 dark:bg-amber-900/30"
@@ -369,3 +369,4 @@ export default function Home() {
     </div>
   );
 }
+
