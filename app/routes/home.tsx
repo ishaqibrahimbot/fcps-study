@@ -49,7 +49,18 @@ export async function loader({ request }: Route.LoaderArgs) {
     })
   );
 
-  return { papers: papersWithProgress, user };
+  // Sort papers: for free users, show free papers first
+  const sortedPapers = papersWithProgress.sort((a, b) => {
+    if (user.subscriptionStatus === "free") {
+      // Free papers first, then premium
+      if (a.accessTier === "free" && b.accessTier !== "free") return -1;
+      if (a.accessTier !== "free" && b.accessTier === "free") return 1;
+    }
+    // Within same tier, sort by creation date (newest first)
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
+
+  return { papers: sortedPapers, user };
 }
 
 export async function action({ request }: Route.ActionArgs) {
