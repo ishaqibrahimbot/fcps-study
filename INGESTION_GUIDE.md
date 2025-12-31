@@ -9,6 +9,12 @@ This guide explains how to extract MCQ questions from scanned PDF books and impo
    ```
    DATABASE_URL=postgresql://user:password@host/database
    GEMINI_API_KEY=your-gemini-api-key
+
+   # Optional: for full app functionality
+   AUTH_SECRET=your-32-character-random-secret
+   AUTH_GOOGLE_ID=your-google-oauth-client-id
+   AUTH_GOOGLE_SECRET=your-google-oauth-client-secret
+   RESEND_API_KEY=your-resend-api-key
    ```
 
 2. **PDF Files** - Place your PDF files in the `books/` directory (or any accessible path)
@@ -143,27 +149,37 @@ After a dry run, review the generated JSON file in the `output/` directory.
 
 ## Step 3: Import JSON to Database
 
-The `import` command pushes the extracted questions from a JSON file into the Neon database.
+The `import` command pushes the extracted questions from a JSON file into the Neon database. Papers are global and can be assigned an access tier (free or premium).
 
 ### Command Syntax
 
 ```bash
-npm run import -- --file <path-to-json> [--skip-existing]
+npm run import -- --file <path-to-json> [--tier <tier>] [--skip-existing]
 ```
 
 ### Options
 
-| Option              | Required | Description                                 |
-| ------------------- | -------- | ------------------------------------------- |
-| `-f, --file <path>` | ✅       | Path to JSON file (from dry-run output)     |
-| `--skip-existing`   | ❌       | Skip if paper with same name already exists |
+| Option              | Required | Description                                         |
+| ------------------- | -------- | --------------------------------------------------- |
+| `-f, --file <path>` | ✅       | Path to JSON file (from dry-run output)             |
+| `-t, --tier <tier>` | ❌       | Access tier: 'free' or 'premium' (default: premium) |
+| `--skip-existing`   | ❌       | Skip if paper with same name already exists         |
 
 ### Examples
 
-#### Basic Import
+#### Basic Import (Premium by default)
 
 ```bash
-npm run import -- --file output/Medicine_20_August_Afternoon-1766666849619.json
+npm run import -- \
+  --file output/Medicine_20_August_Afternoon-1766666849619.json
+```
+
+#### Import as Free Paper
+
+```bash
+npm run import -- \
+  --file output/Medicine_20_August_Afternoon-1766666849619.json \
+  --tier free
 ```
 
 Output:
@@ -172,6 +188,7 @@ Output:
 📥 Import to Database
 ==================================================
 File: /path/to/output/Medicine_20_August_Afternoon-1766666849619.json
+Access Tier: premium
 ==================================================
 
 Paper: Medicine 20 August Afternoon
@@ -179,8 +196,8 @@ Source: SK 19 Vol 1
 Questions: 153
 
 💾 Saving to database...
-   ✓ Created paper: Medicine 20 August Afternoon (ID: 1)
-   ✓ Inserted 153 questions
+   ✓ Created paper: Medicine 20 August Afternoon (ID: 1, Tier: premium)
+   ✓ Inserted 153 questions (45 with explanations)
 
 ✅ Import complete!
 ```
@@ -188,9 +205,27 @@ Questions: 153
 #### Skip Existing Papers
 
 ```bash
-# Won't create duplicate if paper already exists
-npm run import -- --file output/paper.json --skip-existing
+# Won't create duplicate if paper already exists for this user
+npm run import -- --file output/paper.json --user doctor@example.com --skip-existing
 ```
+
+> **Note:** The user must already exist in the database. Create an account by signing up through the web app first.
+
+---
+
+## Migrating Existing Data
+
+If you have existing papers/sessions from before authentication was added, use the migration script:
+
+```bash
+# Preview what will be migrated (dry run)
+npm run migrate-user -- --user doctor@example.com --dry-run
+
+# Actually migrate the data
+npm run migrate-user -- --user doctor@example.com
+```
+
+This associates any "orphaned" papers and test sessions (those without a userId) with the specified user.
 
 ---
 
@@ -341,6 +376,37 @@ The OCR couldn't extract the choices - this usually happens with:
 
 ---
 
+## Subscription & Access Management
+
+Papers can be marked as 'free' or 'premium'. Users can be 'free' or 'subscribed'.
+
+### Set User Subscription
+
+```bash
+# Upgrade a user to premium
+npm run set-subscription -- --email user@example.com --status subscribed
+
+# Downgrade to free
+npm run set-subscription -- --email user@example.com --status free
+```
+
+### Migrate Existing Data
+
+After updating to the access system, run the migration to set defaults:
+
+```bash
+# Preview changes
+npm run migrate-access -- --dry-run
+
+# Apply changes
+npm run migrate-access
+
+# Optionally upgrade a user during migration
+npm run migrate-access -- --upgrade-user admin@example.com
+```
+
+---
+
 ## File Structure
 
 ```
@@ -354,6 +420,8 @@ flashcard-app/
 │   ├── ingest.ts                  # PDF ingestion script
 │   ├── import.ts                  # Database import script
 │   ├── generate-explanations.ts   # AI explanation generator
-│   └── combine-papers.ts          # Combine split papers
+│   ├── combine-papers.ts          # Combine split papers
+│   ├── set-subscription.ts        # Manage user subscriptions
+│   └── migrate-access-system.ts   # Migrate to access control system
 └── .env                     # Environment variables
 ```

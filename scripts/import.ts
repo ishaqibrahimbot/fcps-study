@@ -16,6 +16,11 @@ program
     "-f, --file <path>",
     "Path to JSON file (from dry-run output)"
   )
+  .option(
+    "-t, --tier <tier>",
+    "Access tier for the paper (free or premium)",
+    "premium"
+  )
   .option("--skip-existing", "Skip if paper with same name already exists")
   .parse();
 
@@ -45,11 +50,21 @@ interface ImportedPaper {
 
 async function main() {
   const filePath = path.resolve(options.file);
+  const accessTier = options.tier as "free" | "premium";
   const skipExisting = options.skipExisting || false;
+
+  // Validate tier
+  if (!["free", "premium"].includes(accessTier)) {
+    console.error(
+      `\n❌ Invalid tier: ${accessTier}. Must be 'free' or 'premium'.`
+    );
+    process.exit(1);
+  }
 
   console.log("\n📥 Import to Database");
   console.log("=".repeat(50));
   console.log(`File: ${filePath}`);
+  console.log(`Access Tier: ${accessTier}`);
   console.log("=".repeat(50));
 
   // Check if file exists
@@ -90,7 +105,7 @@ async function main() {
   console.log(`Questions: ${data.questions.length}`);
 
   if (skipExisting) {
-    // Check if paper already exists
+    // Check if paper already exists (global check)
     const existing = await db.query.papers.findFirst({
       where: (p, { eq }) => eq(p.name, data.name),
     });
@@ -101,7 +116,7 @@ async function main() {
     }
   }
 
-  // Insert paper
+  // Insert paper (global, no userId)
   console.log("\n💾 Saving to database...");
 
   const [insertedPaper] = await db
@@ -110,11 +125,12 @@ async function main() {
       name: data.name,
       source: data.source,
       questionCount: data.questions.length,
+      accessTier,
     })
     .returning();
 
   console.log(
-    `   ✓ Created paper: ${insertedPaper.name} (ID: ${insertedPaper.id})`
+    `   ✓ Created paper: ${insertedPaper.name} (ID: ${insertedPaper.id}, Tier: ${accessTier})`
   );
 
   // Insert questions

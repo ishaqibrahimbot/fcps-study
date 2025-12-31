@@ -2,17 +2,22 @@ import { useState, useEffect, useCallback } from "react";
 import { useLoaderData, useNavigate, useFetcher, Link } from "react-router";
 import { db } from "~/db";
 import { papers, questions, testSessions } from "~/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { QuestionCard, Timer, ProgressBar, ScoreCard } from "~/components";
 import type { Route } from "./+types/test";
+import { requireAuth } from "~/lib/require-auth.server";
+import { canAccessPaper } from "~/lib/access-control.server";
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ params, request }: Route.LoaderArgs) {
+  const user = await requireAuth(request);
   const sessionId = parseInt(params.sessionId);
 
   const [session] = await db
     .select()
     .from(testSessions)
-    .where(eq(testSessions.id, sessionId));
+    .where(
+      and(eq(testSessions.id, sessionId), eq(testSessions.userId, user.id))
+    );
 
   if (!session) {
     throw new Response("Session not found", { status: 404 });
@@ -22,6 +27,18 @@ export async function loader({ params }: Route.LoaderArgs) {
     .select()
     .from(papers)
     .where(eq(papers.id, session.paperId));
+
+  if (!paper) {
+    throw new Response("Paper not found", { status: 404 });
+  }
+
+  // Verify user has access to this paper
+  if (!canAccessPaper(user, paper)) {
+    throw new Response(
+      "Access denied. Upgrade to premium to access this paper.",
+      { status: 403 }
+    );
+  }
 
   const questionList = await db
     .select()
@@ -37,6 +54,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
+  const user = await requireAuth(request);
   const sessionId = parseInt(params.sessionId);
   const formData = await request.formData();
   const actionType = formData.get("_action");
@@ -44,7 +62,9 @@ export async function action({ request, params }: Route.ActionArgs) {
   const [session] = await db
     .select()
     .from(testSessions)
-    .where(eq(testSessions.id, sessionId));
+    .where(
+      and(eq(testSessions.id, sessionId), eq(testSessions.userId, user.id))
+    );
 
   if (!session) {
     throw new Response("Session not found", { status: 404 });

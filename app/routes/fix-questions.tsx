@@ -4,14 +4,25 @@ import { db } from "~/db";
 import { papers, questions } from "~/db/schema";
 import { eq } from "drizzle-orm";
 import type { Route } from "./+types/fix-questions";
+import { requireAuth } from "~/lib/require-auth.server";
+import { canAccessPaper } from "~/lib/access-control.server";
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function loader({ params, request }: Route.LoaderArgs) {
+  const user = await requireAuth(request);
   const paperId = parseInt(params.paperId);
 
   const [paper] = await db.select().from(papers).where(eq(papers.id, paperId));
 
   if (!paper) {
     throw new Response("Paper not found", { status: 404 });
+  }
+
+  // Verify user has access to this paper
+  if (!canAccessPaper(user, paper)) {
+    throw new Response(
+      "Access denied. Upgrade to premium to access this paper.",
+      { status: 403 }
+    );
   }
 
   // Get incomplete questions: empty choices OR no valid correct choice
@@ -38,6 +49,7 @@ export async function loader({ params }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  await requireAuth(request);
   const formData = await request.formData();
   const actionType = formData.get("_action");
 

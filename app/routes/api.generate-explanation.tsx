@@ -3,8 +3,11 @@ import { questions } from "~/db/schema";
 import { eq } from "drizzle-orm";
 import { generateExplanation } from "~/lib/explanation-generator.server";
 import type { Route } from "./+types/api.generate-explanation";
+import { requireAuth } from "~/lib/require-auth.server";
 
 export async function action({ request }: Route.ActionArgs) {
+  await requireAuth(request);
+
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
