@@ -5,13 +5,19 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@resend.dev";
 const APP_NAME = "FCPS Prep";
 
+// Production domain for all user-facing links in emails
+const PRODUCTION_URL = "https://fcps-study.vercel.app";
+
 function getBaseUrl(): string {
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
+  // In production (Vercel), always use the canonical production URL
+  if (process.env.VERCEL) {
+    return PRODUCTION_URL;
   }
+  // Allow override via APP_URL for staging/custom domains
   if (process.env.APP_URL) {
     return process.env.APP_URL;
   }
+  // Local development
   return "http://localhost:5173";
 }
 
