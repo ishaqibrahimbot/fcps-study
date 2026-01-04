@@ -124,7 +124,16 @@ export default function Dashboard() {
             </Link>
 
             {/* User menu */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+              {!isSubscribed && (
+                <Link
+                  to="/upgrade"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-800/30 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50 rounded-lg hover:from-amber-200 hover:to-amber-100 dark:hover:from-amber-900/60 dark:hover:to-amber-800/50 transition-all"
+                >
+                  <span>👑</span>
+                  Upgrade
+                </Link>
+              )}
               <div className="text-right hidden sm:block">
                 <div className="flex items-center gap-2 justify-end">
                   <p className="text-sm font-medium text-slate-900 dark:text-white">
@@ -173,6 +182,44 @@ export default function Dashboard() {
 
       {/* Main content */}
       <main className="max-w-5xl mx-auto px-4 py-5 sm:py-8">
+        {/* Upgrade Banner for Free Users */}
+        {!isSubscribed && (
+          <Link
+            to="/upgrade"
+            className="block mb-6 sm:mb-8 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white hover:from-amber-600 hover:to-amber-700 transition-all group"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <span className="text-3xl sm:text-4xl">👑</span>
+                <div>
+                  <h3 className="font-bold text-lg sm:text-xl">
+                    Upgrade to Premium
+                  </h3>
+                  <p className="text-amber-100 text-sm sm:text-base">
+                    Unlock all {papers.filter((p) => !p.hasAccess).length}{" "}
+                    premium papers with detailed explanations
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center group-hover:bg-white/30 transition-colors">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </div>
+            </div>
+          </Link>
+        )}
+
         {/* Stats summary */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800">

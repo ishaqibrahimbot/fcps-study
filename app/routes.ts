@@ -6,6 +6,7 @@ export default [
 
   // Dashboard (authenticated)
   route("dashboard", "routes/dashboard.tsx"),
+  route("upgrade", "routes/upgrade.tsx"),
 
   // Auth routes
   route("login", "routes/login.tsx"),
