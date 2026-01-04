@@ -62,7 +62,7 @@ export default function LoginPage({
   let successMessage: string | null = null;
   if (registered) {
     successMessage =
-      "Account created! Please check your email to verify your account.";
+      "Account created! Please check your email (including spam folder) to verify your account within 7 days.";
   } else if (verified) {
     successMessage = "Email verified! You can now log in.";
   } else if (reset) {
