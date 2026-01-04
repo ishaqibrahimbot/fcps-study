@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { eq } from "drizzle-orm";
 import type { Route } from "./+types/signup";
 import { AuthForm, InputField } from "~/components/AuthForm";
-import { hashPassword, getSession } from "~/lib/auth.server";
+import { hashPassword, getSession, createSessionToken, createSessionCookie } from "~/lib/auth.server";
 import { db } from "~/db";
 import { users, verificationTokens } from "~/db/schema";
 import { sendVerificationEmail, generateToken } from "~/lib/email.server";
@@ -79,7 +79,20 @@ export async function action({ request }: Route.ActionArgs) {
     // Don't fail signup if email fails, user can request a new one
   }
 
-  return redirect("/login?registered=true");
+  // Automatically log the user in by creating a session
+  const sessionToken = await createSessionToken({
+    userId,
+    email,
+    name,
+    image: null,
+  });
+
+  // Redirect to dashboard with session cookie
+  return redirect("/dashboard", {
+    headers: {
+      "Set-Cookie": createSessionCookie(sessionToken),
+    },
+  });
 }
 
 export default function SignupPage({
