@@ -186,9 +186,13 @@ export default function Dashboard() {
         {!isSubscribed && (
           <Link
             to="/upgrade"
-            className="block mb-6 sm:mb-8 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white hover:from-amber-600 hover:to-amber-700 transition-all group"
+            className="block mb-6 sm:mb-8 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white hover:from-amber-600 hover:to-amber-700 transition-all group relative overflow-hidden"
           >
-            <div className="flex items-center justify-between gap-4">
+            {/* Early bird badge */}
+            <div className="absolute top-0 right-0 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-bl-xl text-xs sm:text-sm font-semibold">
+              🎁 First 10 users get FREE lifetime access!
+            </div>
+            <div className="flex items-center justify-between gap-4 mt-4 sm:mt-2">
               <div className="flex items-center gap-3 sm:gap-4">
                 <span className="text-3xl sm:text-4xl">👑</span>
                 <div>

@@ -124,6 +124,17 @@ export default function UpgradePage({
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-12">
+        {/* Early Bird Banner */}
+        <div className="mb-8 p-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl text-white text-center">
+          <p className="text-lg sm:text-xl font-bold mb-1">
+            🎁 Early Bird Offer!
+          </p>
+          <p className="text-emerald-100">
+            First 10 users to request an upgrade get{" "}
+            <span className="font-bold underline">FREE lifetime access</span>!
+          </p>
+        </div>
+
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 rounded-full mb-6">
             <span className="text-2xl">👑</span>
