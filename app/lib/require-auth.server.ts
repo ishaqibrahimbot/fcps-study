@@ -10,6 +10,8 @@ export type AuthenticatedUser = {
   email: string;
   image: string | null;
   subscriptionStatus: "free" | "subscribed";
+  emailVerified: Date | null;
+  createdAt: Date;
 };
 
 /**
@@ -27,11 +29,13 @@ export async function requireAuth(
     throw redirect(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
   }
 
-  // Fetch subscription status from database
+  // Fetch user details from database
   const user = await db.query.users.findFirst({
     where: eq(users.id, session.userId),
     columns: {
       subscriptionStatus: true,
+      emailVerified: true,
+      createdAt: true,
     },
   });
 
@@ -41,6 +45,8 @@ export async function requireAuth(
     email: session.email,
     image: session.image ?? null,
     subscriptionStatus: user?.subscriptionStatus ?? "free",
+    emailVerified: user?.emailVerified ?? null,
+    createdAt: user?.createdAt ?? new Date(),
   };
 }
 
@@ -57,11 +63,13 @@ export async function getOptionalUser(
     return null;
   }
 
-  // Fetch subscription status from database
+  // Fetch user details from database
   const user = await db.query.users.findFirst({
     where: eq(users.id, session.userId),
     columns: {
       subscriptionStatus: true,
+      emailVerified: true,
+      createdAt: true,
     },
   });
 
@@ -71,5 +79,7 @@ export async function getOptionalUser(
     email: session.email,
     image: session.image ?? null,
     subscriptionStatus: user?.subscriptionStatus ?? "free",
+    emailVerified: user?.emailVerified ?? null,
+    createdAt: user?.createdAt ?? new Date(),
   };
 }

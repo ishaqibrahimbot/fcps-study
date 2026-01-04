@@ -48,7 +48,8 @@ export async function sendVerificationEmail(
               <p style="background: #e2e8f0; padding: 12px; border-radius: 6px; word-break: break-all; font-size: 12px; color: #475569;">
                 ${verifyUrl}
               </p>
-              <p style="color: #64748b; font-size: 14px; margin-bottom: 0;">This link will expire in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
+              <p style="color: #64748b; font-size: 14px; margin-bottom: 0;">This link will expire in 24 hours. Please verify your email within 7 days to keep access to your account. If you didn't create an account, you can safely ignore this email.</p>
+              <p style="color: #94a3b8; font-size: 12px; margin-top: 12px; margin-bottom: 0;">💡 Tip: If you don't see this email in your inbox, please check your spam or junk folder.</p>
             </div>
           </body>
         </html>

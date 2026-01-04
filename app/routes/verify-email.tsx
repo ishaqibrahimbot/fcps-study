@@ -69,9 +69,12 @@ export default function VerifyEmailPage({ loaderData }: Route.ComponentProps) {
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">
           Verification Failed
         </h1>
-        <p className="text-slate-600 dark:text-slate-400 mb-8">
+        <p className="text-slate-600 dark:text-slate-400 mb-4">
           {loaderData?.error ||
             "This verification link is invalid or has expired."}
+        </p>
+        <p className="text-sm text-slate-500 dark:text-slate-500 mb-8">
+          If you need a new verification link, please log in to your account and we'll send you one. Don't forget to check your spam folder!
         </p>
         <Link
           to="/login"
