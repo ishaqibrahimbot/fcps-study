@@ -259,6 +259,96 @@ export async function sendUpgradeInstructionsEmail(
 }
 
 /**
+ * Send notification to admin when a question is flagged as inaccurate
+ */
+export async function sendFlaggedQuestionNotification(
+  userEmail: string,
+  userName: string | null,
+  questionId: number,
+  questionText: string,
+  paperName: string,
+  reason?: string
+): Promise<void> {
+  const timestamp = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Karachi",
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  try {
+    await resend.emails.send({
+      from: `${APP_NAME} <${FROM_EMAIL}>`,
+      to: UPGRADE_CONFIG.adminEmail,
+      subject: `🚩 Question Flagged - ${paperName}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🚩 Question Flagged</h1>
+            </div>
+            <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0; border-top: none;">
+              <p style="margin-top: 0; font-size: 16px;">A user has flagged a question as potentially inaccurate.</p>
+              
+              <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 20px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px 0; color: #64748b; width: 30%; vertical-align: top;">Paper:</td>
+                    <td style="padding: 10px 0; font-weight: 600;">${paperName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #64748b; vertical-align: top;">Question ID:</td>
+                    <td style="padding: 10px 0; font-weight: 600;">#${questionId}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #64748b; vertical-align: top;">Question:</td>
+                    <td style="padding: 10px 0;">${questionText.length > 200 ? questionText.substring(0, 200) + "..." : questionText}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #64748b; vertical-align: top;">Flagged by:</td>
+                    <td style="padding: 10px 0; font-weight: 600;">
+                      ${userName || "Unknown"} (<a href="mailto:${userEmail}" style="color: #2a87ff;">${userEmail}</a>)
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px 0; color: #64748b; vertical-align: top;">Flagged at:</td>
+                    <td style="padding: 10px 0;">${timestamp}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              ${
+                reason
+                  ? `
+              <div style="background: #fef3c7; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 20px;">
+                <p style="margin: 0 0 8px 0; font-weight: 600; color: #92400e;">User's reason:</p>
+                <p style="margin: 0; color: #78350f;">${reason}</p>
+              </div>
+              `
+                  : `
+              <p style="color: #64748b; font-style: italic;">No reason provided by the user.</p>
+              `
+              }
+              
+              <p style="color: #64748b; font-size: 14px; margin-top: 20px;">
+                Please review this question and make corrections if needed.
+              </p>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+  } catch (error) {
+    // Don't fail the main request if notification fails
+    console.error("Failed to send flagged question notification:", error);
+  }
+}
+
+/**
  * Send notification to admin when a user requests upgrade instructions
  */
 async function sendUpgradeNotificationToAdmin(

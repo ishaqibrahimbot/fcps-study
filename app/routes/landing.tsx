@@ -88,10 +88,30 @@ export default function LandingPage() {
           </h1>
 
           {/* Subheadline */}
-          <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10">
-            Practice with curated MCQs from top resources, get AI-powered
-            explanations, and track your progress with smart learning modes.
+          <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-6">
+            Practice with curated MCQs from popular FCPS prep books like{" "}
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
+              SK
+            </span>{" "}
+            and{" "}
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
+              AA
+            </span>
+            , get AI-powered explanations, and track your progress.
           </p>
+
+          {/* Source badges */}
+          <div className="flex items-center justify-center gap-3 mb-10">
+            <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              📚 SK Book
+            </span>
+            <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              📖 AA Book
+            </span>
+            <span className="px-3 py-1.5 bg-primary-50 dark:bg-primary-900/30 rounded-lg text-sm font-medium text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800">
+              + More coming
+            </span>
+          </div>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
@@ -171,11 +191,11 @@ export default function LandingPage() {
                 <div className="text-6xl">📚</div>
               </div>
               <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">
-                Curated Question Banks
+                SK & AA Question Banks
               </h3>
               <p className="text-slate-600 dark:text-slate-400">
-                High-yield MCQs extracted from trusted FCPS preparation books
-                and past papers, organized by topic.
+                High-yield MCQs from popular prep books like SK and AA, with
+                more sources being added regularly.
               </p>
             </div>
 

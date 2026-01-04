@@ -10,7 +10,7 @@ interface QuestionCardProps {
   onSelectAnswer: (choiceIndex: number) => void;
   showResult?: boolean;
   mode: "test" | "learning";
-  onFlagQuestion?: (questionId: number) => void;
+  onFlagQuestion?: (questionId: number, reason?: string) => void;
 }
 
 export function QuestionCard({
@@ -33,11 +33,32 @@ export function QuestionCard({
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  const handleFlag = () => {
+  // Flag modal state
+  const [showFlagModal, setShowFlagModal] = useState(false);
+  const [flagReason, setFlagReason] = useState("");
+  const [isSubmittingFlag, setIsSubmittingFlag] = useState(false);
+
+  const handleFlagClick = () => {
+    setShowFlagModal(true);
+    setFlagReason("");
+  };
+
+  const handleFlagConfirm = async () => {
     if (onFlagQuestion) {
-      onFlagQuestion(question.id);
-      setJustFlagged(true);
+      setIsSubmittingFlag(true);
+      try {
+        await onFlagQuestion(question.id, flagReason || undefined);
+        setJustFlagged(true);
+        setShowFlagModal(false);
+      } finally {
+        setIsSubmittingFlag(false);
+      }
     }
+  };
+
+  const handleFlagCancel = () => {
+    setShowFlagModal(false);
+    setFlagReason("");
   };
 
   const handleGenerateExplanation = async () => {
@@ -111,52 +132,53 @@ export function QuestionCard({
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto">
-      {/* Flagged warning */}
-      {(question.flagged || justFlagged) && (
-        <div className="mb-4 p-3 rounded-lg bg-warning-100 dark:bg-warning-500/10 border border-warning-400/30 flex items-center gap-2">
-          <svg
-            className="w-5 h-5 text-warning-500 flex-shrink-0"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-          <span className="text-sm text-warning-600 dark:text-warning-400">
-            This question was flagged as potentially inaccurate
-          </span>
-        </div>
-      )}
+    <>
+      <div className="w-full max-w-3xl mx-auto">
+        {/* Flagged warning */}
+        {(question.flagged || justFlagged) && (
+          <div className="mb-4 p-3 rounded-lg bg-warning-100 dark:bg-warning-500/10 border border-warning-400/30 flex items-center gap-2">
+            <svg
+              className="w-5 h-5 text-warning-500 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <span className="text-sm text-warning-600 dark:text-warning-400">
+              This question was flagged as potentially inaccurate
+            </span>
+          </div>
+        )}
 
-      {/* Question header */}
-      <div className="mb-4 sm:mb-5">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs sm:text-sm font-medium text-primary-600 dark:text-primary-400">
-            Q{questionNumber}/{totalQuestions}
-          </span>
+        {/* Question header */}
+        <div className="mb-4 sm:mb-5">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs sm:text-sm font-medium text-primary-600 dark:text-primary-400">
+              Q{questionNumber}/{totalQuestions}
+            </span>
+          </div>
+          <p className="text-base sm:text-lg font-medium text-slate-800 dark:text-slate-100 leading-relaxed sm:leading-snug">
+            {question.questionText}
+          </p>
         </div>
-        <p className="text-base sm:text-lg font-medium text-slate-800 dark:text-slate-100 leading-relaxed sm:leading-snug">
-          {question.questionText}
-        </p>
-      </div>
 
-      {/* Choices */}
-      <div className="space-y-2 sm:space-y-1.5">
-        {question.choices.map((choice, index) => (
-          <button
-            key={index}
-            onClick={() => handleSelect(index)}
-            disabled={mode === "learning" && hasAnswered}
-            className={getChoiceStyles(index)}
-          >
-            <span
-              className={`flex-shrink-0 w-7 h-7 sm:w-6 sm:h-6 rounded-lg sm:rounded flex items-center justify-center font-semibold text-xs mt-0.5 sm:mt-0
+        {/* Choices */}
+        <div className="space-y-2 sm:space-y-1.5">
+          {question.choices.map((choice, index) => (
+            <button
+              key={index}
+              onClick={() => handleSelect(index)}
+              disabled={mode === "learning" && hasAnswered}
+              className={getChoiceStyles(index)}
+            >
+              <span
+                className={`shrink-0 w-7 h-7 sm:w-6 sm:h-6 rounded-lg sm:rounded flex items-center justify-center font-semibold text-xs mt-0.5 sm:mt-0
               ${
                 shouldShowResult && index === question.correctChoice
                   ? "bg-success-500 text-white"
@@ -168,103 +190,133 @@ export function QuestionCard({
                       ? "bg-primary-500 text-white"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
               }`}
-            >
-              {getChoiceLabel(index)}
-            </span>
-            <span className="flex-1 leading-relaxed">{choice}</span>
-            {shouldShowResult && index === question.correctChoice && (
-              <span className="text-success-500 flex-shrink-0 text-base sm:text-sm">
-                ✓
+              >
+                {getChoiceLabel(index)}
               </span>
-            )}
-            {shouldShowResult &&
-              selectedAnswer === index &&
-              index !== question.correctChoice && (
-                <span className="text-error-500 flex-shrink-0 text-base sm:text-sm">
-                  ✗
+              <span className="flex-1 leading-relaxed">{choice}</span>
+              {shouldShowResult && index === question.correctChoice && (
+                <span className="text-success-500 shrink-0 text-base sm:text-sm">
+                  ✓
                 </span>
               )}
-          </button>
-        ))}
-      </div>
-
-      {/* Explanation - show after answering in learning mode or in review */}
-      {shouldShowResult && displayExplanation && (
-        <div
-          className={`mt-4 sm:mt-5 p-4 sm:p-3 rounded-xl sm:rounded-lg border text-sm ${
-            isCorrect
-              ? "border-success-500/30 bg-emerald-50/50 dark:bg-emerald-950/20"
-              : "border-error-500/30 bg-red-50/50 dark:bg-red-950/20"
-          }`}
-        >
-          <div className="flex items-center gap-2 sm:gap-1.5 mb-3 sm:mb-2">
-            <span
-              className={`text-lg sm:text-base ${
-                isCorrect ? "text-success-500" : "text-error-500"
-              }`}
-            >
-              {isCorrect ? "✓" : "✗"}
-            </span>
-            <span
-              className={`font-semibold text-base sm:text-sm ${
-                isCorrect
-                  ? "text-success-600 dark:text-success-500"
-                  : "text-error-600 dark:text-error-500"
-              }`}
-            >
-              {isCorrect ? "Correct" : "Incorrect"}
-            </span>
-          </div>
-          <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 leading-relaxed [&>p]:my-2 [&>ul]:my-2 [&>ol]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&_strong]:text-slate-800 dark:[&_strong]:text-slate-100 [&_li]:my-0.5 [&_ul]:pl-4 [&_ol]:pl-4">
-            <Markdown>{displayExplanation}</Markdown>
-          </div>
+              {shouldShowResult &&
+                selectedAnswer === index &&
+                index !== question.correctChoice && (
+                  <span className="text-error-500 shrink-0 text-base sm:text-sm">
+                    ✗
+                  </span>
+                )}
+            </button>
+          ))}
         </div>
-      )}
 
-      {/* Generate explanation button - show when no explanation exists */}
-      {shouldShowResult && !displayExplanation && (
-        <div className="mt-4 sm:mt-5">
-          {generateError && (
-            <div className="mb-3 p-3 rounded-lg bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-600 dark:text-error-400">
-              {generateError}
-            </div>
-          )}
-          <button
-            onClick={handleGenerateExplanation}
-            disabled={isGenerating}
-            className={`w-full py-3 px-4 rounded-xl border-2 border-dashed transition-all flex items-center justify-center gap-2 text-sm font-medium ${
-              isGenerating
-                ? "border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400 cursor-wait"
-                : "border-primary-300 dark:border-primary-700 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-primary-600 dark:text-primary-400"
+        {/* Explanation - show after answering in learning mode or in review */}
+        {shouldShowResult && displayExplanation && (
+          <div
+            className={`mt-4 sm:mt-5 p-4 sm:p-3 rounded-xl sm:rounded-lg border text-sm ${
+              isCorrect
+                ? "border-success-500/30 bg-emerald-50/50 dark:bg-emerald-950/20"
+                : "border-error-500/30 bg-red-50/50 dark:bg-red-950/20"
             }`}
           >
-            {isGenerating ? (
-              <>
-                <svg
-                  className="w-5 h-5 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
+            <div className="flex items-center gap-2 sm:gap-1.5 mb-3 sm:mb-2">
+              <span
+                className={`text-lg sm:text-base ${
+                  isCorrect ? "text-success-500" : "text-error-500"
+                }`}
+              >
+                {isCorrect ? "✓" : "✗"}
+              </span>
+              <span
+                className={`font-semibold text-base sm:text-sm ${
+                  isCorrect
+                    ? "text-success-600 dark:text-success-500"
+                    : "text-error-600 dark:text-error-500"
+                }`}
+              >
+                {isCorrect ? "Correct" : "Incorrect"}
+              </span>
+            </div>
+            <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-slate-600 dark:text-slate-300 leading-relaxed [&>p]:my-2 [&>ul]:my-2 [&>ol]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0 [&_strong]:text-slate-800 dark:[&_strong]:text-slate-100 [&_li]:my-0.5 [&_ul]:pl-4 [&_ol]:pl-4">
+              <Markdown>{displayExplanation}</Markdown>
+            </div>
+          </div>
+        )}
+
+        {/* Generate explanation button - show when no explanation exists */}
+        {shouldShowResult && !displayExplanation && (
+          <div className="mt-4 sm:mt-5">
+            {generateError && (
+              <div className="mb-3 p-3 rounded-lg bg-error-50 dark:bg-error-900/20 border border-error-200 dark:border-error-800 text-sm text-error-600 dark:text-error-400">
+                {generateError}
+              </div>
+            )}
+            <button
+              onClick={handleGenerateExplanation}
+              disabled={isGenerating}
+              className={`w-full py-3 px-4 rounded-xl border-2 border-dashed transition-all flex items-center justify-center gap-2 text-sm font-medium ${
+                isGenerating
+                  ? "border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-400 cursor-wait"
+                  : "border-primary-300 dark:border-primary-700 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-primary-600 dark:text-primary-400"
+              }`}
+            >
+              {isGenerating ? (
+                <>
+                  <svg
+                    className="w-5 h-5 animate-spin"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Generating explanation...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
                     stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                Generating explanation...
-              </>
-            ) : (
-              <>
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    />
+                  </svg>
+                  Generate explanation
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Flag button - show after answering if not already flagged */}
+        {shouldShowResult &&
+          !question.flagged &&
+          !justFlagged &&
+          onFlagQuestion && (
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleFlagClick}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 hover:text-warning-600 dark:hover:text-warning-400 hover:bg-warning-50 dark:hover:bg-warning-500/10 rounded-lg transition-colors"
+              >
                 <svg
-                  className="w-5 h-5"
+                  className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -273,43 +325,115 @@ export function QuestionCard({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                    d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"
                   />
                 </svg>
-                Generate explanation
-              </>
-            )}
-          </button>
+                Flag as inaccurate
+              </button>
+            </div>
+          )}
+      </div>
+
+      {/* Flag Modal */}
+      {showFlagModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={handleFlagCancel}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-4 mb-4">
+              <div className="w-10 h-10 rounded-full bg-warning-100 dark:bg-warning-500/20 flex items-center justify-center shrink-0">
+                <svg
+                  className="w-5 h-5 text-warning-600 dark:text-warning-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+                  Flag this question?
+                </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  This will mark the question as potentially inaccurate and
+                  notify our team to review it.
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label
+                htmlFor="flag-reason"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2"
+              >
+                What's wrong with this question?{" "}
+                <span className="text-slate-400 font-normal">(optional)</span>
+              </label>
+              <textarea
+                id="flag-reason"
+                value={flagReason}
+                onChange={(e) => setFlagReason(e.target.value)}
+                placeholder="e.g., The correct answer seems wrong, the explanation is incorrect, there's a typo..."
+                rows={3}
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-warning-500 focus:border-transparent resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleFlagCancel}
+                disabled={isSubmittingFlag}
+                className="flex-1 px-4 py-2.5 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 font-medium rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFlagConfirm}
+                disabled={isSubmittingFlag}
+                className="flex-1 px-4 py-2.5 bg-warning-500 hover:bg-warning-600 text-white font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isSubmittingFlag ? (
+                  <>
+                    <svg
+                      className="w-4 h-4 animate-spin"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Submitting...
+                  </>
+                ) : (
+                  "Flag Question"
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
-      {/* Flag button - show after answering if not already flagged */}
-      {shouldShowResult &&
-        !question.flagged &&
-        !justFlagged &&
-        onFlagQuestion && (
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={handleFlag}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 hover:text-warning-600 dark:hover:text-warning-400 hover:bg-warning-50 dark:hover:bg-warning-500/10 rounded-lg transition-colors"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"
-                />
-              </svg>
-              Flag as inaccurate
-            </button>
-          </div>
-        )}
-    </div>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { QuestionCard, Timer, ProgressBar, ScoreCard } from "~/components";
 import type { Route } from "./+types/test";
 import { requireAuth } from "~/lib/require-auth.server";
 import { canAccessPaper } from "~/lib/access-control.server";
+import { sendFlaggedQuestionNotification } from "~/lib/email.server";
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireAuth(request);
@@ -120,10 +121,37 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   if (actionType === "flag") {
     const questionId = parseInt(formData.get("questionId") as string);
+    const reason = formData.get("reason") as string | null;
+
+    // Get the question and paper details for the email
+    const [question] = await db
+      .select()
+      .from(questions)
+      .where(eq(questions.id, questionId));
+
+    const [paper] = await db
+      .select()
+      .from(papers)
+      .where(eq(papers.id, session.paperId));
+
+    // Flag the question
     await db
       .update(questions)
       .set({ flagged: true })
       .where(eq(questions.id, questionId));
+
+    // Send notification email to admin
+    if (question && paper) {
+      await sendFlaggedQuestionNotification(
+        user.email,
+        user.name,
+        questionId,
+        question.questionText,
+        paper.name,
+        reason || undefined
+      );
+    }
+
     return { success: true, flagged: true };
   }
 
@@ -245,11 +273,12 @@ export default function TestMode() {
   };
 
   const handleFlagQuestion = useCallback(
-    (questionId: number) => {
+    (questionId: number, reason?: string) => {
       fetcher.submit(
         {
           _action: "flag",
           questionId: questionId.toString(),
+          reason: reason || "",
         },
         { method: "post" }
       );

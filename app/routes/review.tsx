@@ -7,6 +7,7 @@ import { QuestionCard } from "~/components";
 import type { Route } from "./+types/review";
 import { requireAuth } from "~/lib/require-auth.server";
 import { canAccessPaper } from "~/lib/access-control.server";
+import { sendFlaggedQuestionNotification } from "~/lib/email.server";
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   const user = await requireAuth(request);
@@ -53,17 +54,52 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  await requireAuth(request);
+export async function action({ request, params }: Route.ActionArgs) {
+  const user = await requireAuth(request);
+  const sessionId = parseInt(params.sessionId);
   const formData = await request.formData();
   const actionType = formData.get("_action");
 
   if (actionType === "flag") {
     const questionId = parseInt(formData.get("questionId") as string);
+    const reason = formData.get("reason") as string | null;
+
+    // Get the session to find the paper
+    const [session] = await db
+      .select()
+      .from(testSessions)
+      .where(
+        and(eq(testSessions.id, sessionId), eq(testSessions.userId, user.id))
+      );
+
+    // Get the question and paper details for the email
+    const [question] = await db
+      .select()
+      .from(questions)
+      .where(eq(questions.id, questionId));
+
+    const [paper] = session
+      ? await db.select().from(papers).where(eq(papers.id, session.paperId))
+      : [null];
+
+    // Flag the question
     await db
       .update(questions)
       .set({ flagged: true })
       .where(eq(questions.id, questionId));
+
+    // Send notification email to admin
+    if (question && paper) {
+      await sendFlaggedQuestionNotification(
+        user.email,
+        user.name,
+        questionId,
+        question.questionText,
+        paper.name,
+        reason || undefined
+      );
+    }
+
     return { success: true, flagged: true };
   }
 
@@ -98,11 +134,12 @@ export default function ReviewMode() {
   const answers = (session.answers as Record<number, number>) || {};
 
   const handleFlagQuestion = useCallback(
-    (questionId: number) => {
+    (questionId: number, reason?: string) => {
       fetcher.submit(
         {
           _action: "flag",
           questionId: questionId.toString(),
+          reason: reason || "",
         },
         { method: "post" }
       );

@@ -261,9 +261,17 @@ export default function Dashboard() {
         </div>
 
         {/* Papers list */}
-        <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white mb-3 sm:mb-4">
-          Available Papers
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-4">
+          <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
+            Available Papers
+          </h2>
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full">
+              <span className="w-1.5 h-1.5 bg-primary-500 rounded-full animate-pulse"></span>
+              More SK & AA papers coming soon
+            </span>
+          </div>
+        </div>
 
         {papers.length === 0 ? (
           <div className="text-center py-12 sm:py-16 bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800">
