@@ -6,7 +6,7 @@ const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@resend.dev";
 const APP_NAME = "FCPS Prep";
 
 // Production domain for all user-facing links in emails
-const PRODUCTION_URL = "https://fcps-study.vercel.app";
+const PRODUCTION_URL = "https://fcps.study";
 
 function getBaseUrl(): string {
   // In production (Vercel), always use the canonical production URL
