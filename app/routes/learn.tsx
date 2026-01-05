@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLoaderData, useNavigate, useFetcher, Link } from "react-router";
 import { db } from "~/db";
 import { papers, questions, testSessions } from "~/db/schema";
@@ -192,7 +192,11 @@ export default function LearnMode() {
     )
   );
 
-  // Auto-save progress when answers change
+  // Track the latest values for saving on unmount
+  const latestStateRef = useRef({ currentIndex, answers, isCompleted });
+  latestStateRef.current = { currentIndex, answers, isCompleted };
+
+  // Auto-save progress when answers change (debounced)
   useEffect(() => {
     if (isCompleted) return;
 
@@ -209,6 +213,54 @@ export default function LearnMode() {
 
     return () => clearTimeout(saveTimeout);
   }, [currentIndex, answers]);
+
+  // Save immediately when navigating away from the page
+  useEffect(() => {
+    const saveProgress = () => {
+      const {
+        currentIndex: idx,
+        answers: ans,
+        isCompleted: done,
+      } = latestStateRef.current;
+      if (done) return;
+
+      // Use sendBeacon for reliable save on page unload
+      const formData = new FormData();
+      formData.append("_action", "save");
+      formData.append("currentQuestionIndex", idx.toString());
+      formData.append("answers", JSON.stringify(ans));
+
+      navigator.sendBeacon(window.location.pathname, formData);
+    };
+
+    // Handle tab/browser close
+    const handleBeforeUnload = () => {
+      saveProgress();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Save on component unmount (navigation within app)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // For in-app navigation, save immediately
+      const {
+        currentIndex: idx,
+        answers: ans,
+        isCompleted: done,
+      } = latestStateRef.current;
+      if (!done) {
+        fetcher.submit(
+          {
+            _action: "save",
+            currentQuestionIndex: idx.toString(),
+            answers: JSON.stringify(ans),
+          },
+          { method: "post" }
+        );
+      }
+    };
+  }, []);
 
   const handleSelectAnswer = (choiceIndex: number) => {
     if (answers[currentQuestion.id] !== undefined) return; // Already answered

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLoaderData, useNavigate, useFetcher, Link } from "react-router";
 import { db } from "~/db";
 import { papers, questions, testSessions } from "~/db/schema";
@@ -200,6 +200,10 @@ export default function TestMode() {
     )
   );
 
+  // Track the latest values for saving on unmount
+  const latestStateRef = useRef({ currentIndex, answers, timeRemaining, isCompleted, isPaused });
+  latestStateRef.current = { currentIndex, answers, timeRemaining, isCompleted, isPaused };
+
   // Auto-save progress periodically
   useEffect(() => {
     if (isCompleted || isPaused) return;
@@ -218,6 +222,48 @@ export default function TestMode() {
 
     return () => clearInterval(saveInterval);
   }, [currentIndex, answers, timeRemaining, isCompleted, isPaused]);
+
+  // Save immediately when navigating away from the page
+  useEffect(() => {
+    const saveProgress = () => {
+      const { currentIndex: idx, answers: ans, timeRemaining: time, isCompleted: done, isPaused: paused } = latestStateRef.current;
+      if (done || paused) return;
+      
+      // Use sendBeacon for reliable save on page unload
+      const formData = new FormData();
+      formData.append("_action", "save");
+      formData.append("currentQuestionIndex", idx.toString());
+      formData.append("answers", JSON.stringify(ans));
+      formData.append("timeRemaining", time.toString());
+      
+      navigator.sendBeacon(window.location.pathname, formData);
+    };
+
+    // Handle tab/browser close
+    const handleBeforeUnload = () => {
+      saveProgress();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // Save on component unmount (navigation within app)
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // For in-app navigation, save immediately
+      const { currentIndex: idx, answers: ans, timeRemaining: time, isCompleted: done, isPaused: paused } = latestStateRef.current;
+      if (!done && !paused) {
+        fetcher.submit(
+          {
+            _action: "save",
+            currentQuestionIndex: idx.toString(),
+            answers: JSON.stringify(ans),
+            timeRemaining: time.toString(),
+          },
+          { method: "post" }
+        );
+      }
+    };
+  }, []);
 
   const handleTimeUp = useCallback(() => {
     handleSubmit();
