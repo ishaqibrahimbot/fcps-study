@@ -129,12 +129,8 @@ export async function authenticateUser(
     };
   }
 
-  if (!user.emailVerified) {
-    return {
-      error:
-        "Please verify your email before logging in. Check your inbox for the verification link.",
-    };
-  }
+  // Allow login without email verification - users have 7 days to verify
+  // The dashboard will show a banner reminding them to verify
 
   const passwordMatch = await bcrypt.compare(password, user.passwordHash);
 
