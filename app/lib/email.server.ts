@@ -429,3 +429,54 @@ async function sendUpgradeNotificationToAdmin(
     console.error("Failed to send admin notification:", error);
   }
 }
+
+/**
+ * Send notification to admin when a new user signs up
+ */
+export async function sendNewUserNotificationToAdmin(
+  userEmail: string,
+  userName: string | null
+): Promise<void> {
+  const timestamp = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Karachi",
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  try {
+    await resend.emails.send({
+      from: `${APP_NAME} <${FROM_EMAIL}>`,
+      to: UPGRADE_CONFIG.adminEmail,
+      subject: `🎉 New User Signup - ${APP_NAME}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+          </head>
+          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; background: #f5f5f5;">
+            <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 48px;">🎉</span>
+              </div>
+              <h2 style="color: #10b981; margin: 0 0 16px 0; text-align: center;">New User Signed Up!</h2>
+              
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                <p style="margin: 0 0 8px 0;"><strong>Name:</strong> ${userName || "Not provided"}</p>
+                <p style="margin: 0 0 8px 0;"><strong>Email:</strong> ${userEmail}</p>
+                <p style="margin: 0; color: #6b7280; font-size: 14px;"><strong>Time:</strong> ${timestamp}</p>
+              </div>
+
+              <p style="color: #6b7280; font-size: 14px; text-align: center; margin: 0;">
+                The user has been automatically logged in and can start using the app.
+              </p>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+  } catch (error) {
+    // Don't fail signup if admin notification fails
+    console.error("Failed to send new user notification to admin:", error);
+  }
+}

@@ -3,10 +3,19 @@ import { Link } from "react-router";
 import { eq } from "drizzle-orm";
 import type { Route } from "./+types/signup";
 import { AuthForm, InputField } from "~/components/AuthForm";
-import { hashPassword, getSession, createSessionToken, createSessionCookie } from "~/lib/auth.server";
+import {
+  hashPassword,
+  getSession,
+  createSessionToken,
+  createSessionCookie,
+} from "~/lib/auth.server";
 import { db } from "~/db";
 import { users, verificationTokens } from "~/db/schema";
-import { sendVerificationEmail, generateToken } from "~/lib/email.server";
+import {
+  sendVerificationEmail,
+  generateToken,
+  sendNewUserNotificationToAdmin,
+} from "~/lib/email.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   // If already logged in, redirect to dashboard
@@ -78,6 +87,9 @@ export async function action({ request }: Route.ActionArgs) {
     console.error("Failed to send verification email:", emailResult.error);
     // Don't fail signup if email fails, user can request a new one
   }
+
+  // Notify admin of new signup
+  await sendNewUserNotificationToAdmin(email, name);
 
   // Automatically log the user in by creating a session
   const sessionToken = await createSessionToken({
