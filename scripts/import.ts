@@ -21,6 +21,9 @@ program
     "Access tier for the paper (free or premium)",
     "premium"
   )
+  .option("--book <id>", "Book ID to associate paper with")
+  .option("--chapter <id>", "Chapter ID to associate paper with")
+  .option("--order <index>", "Order index within chapter", "0")
   .option("--skip-existing", "Skip if paper with same name already exists")
   .parse();
 
@@ -51,6 +54,9 @@ interface ImportedPaper {
 async function main() {
   const filePath = path.resolve(options.file);
   const accessTier = options.tier as "free" | "premium";
+  const bookId = options.book ? parseInt(options.book) : null;
+  const chapterId = options.chapter ? parseInt(options.chapter) : null;
+  const orderIndex = parseInt(options.order) || 0;
   const skipExisting = options.skipExisting || false;
 
   // Validate tier
@@ -65,6 +71,9 @@ async function main() {
   console.log("=".repeat(50));
   console.log(`File: ${filePath}`);
   console.log(`Access Tier: ${accessTier}`);
+  if (bookId) console.log(`Book ID: ${bookId}`);
+  if (chapterId) console.log(`Chapter ID: ${chapterId}`);
+  if (bookId || chapterId) console.log(`Order Index: ${orderIndex}`);
   console.log("=".repeat(50));
 
   // Check if file exists
@@ -126,11 +135,19 @@ async function main() {
       source: data.source,
       questionCount: data.questions.length,
       accessTier,
+      bookId,
+      chapterId,
+      orderIndex,
     })
     .returning();
 
+  const hierarchy = chapterId
+    ? `Chapter ${chapterId}`
+    : bookId
+      ? `Book ${bookId}`
+      : "Standalone";
   console.log(
-    `   ✓ Created paper: ${insertedPaper.name} (ID: ${insertedPaper.id}, Tier: ${accessTier})`
+    `   ✓ Created paper: ${insertedPaper.name} (ID: ${insertedPaper.id}, Tier: ${accessTier}, ${hierarchy})`
   );
 
   // Insert questions

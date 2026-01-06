@@ -15,6 +15,7 @@
     "ingest": "npx tsx scripts/ingest.ts",
     "ingest-book": "npx tsx scripts/ingest-book.ts",
     "import": "npx tsx scripts/import.ts",
+    "import-book": "npx tsx scripts/import-book.ts",
     "explain": "npx tsx scripts/generate-explanations.ts",
     "set-subscription": "npx tsx scripts/set-subscription.ts",
     "migrate-access": "npx tsx scripts/migrate-access-system.ts"

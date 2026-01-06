@@ -98,12 +98,46 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
 // APPLICATION TABLES
 // ============================================
 
-// Papers table - represents a collection of questions from a specific source
-// Papers are global (shared across all users), access is controlled by accessTier
+// Books table - top-level collection (e.g., "AA Notes 3rd Edition", "SK Book Series")
+export const books = pgTable("books", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  coverImage: text("cover_image"), // URL to cover image
+  accessTier: text("access_tier")
+    .$type<"free" | "premium">()
+    .default("premium")
+    .notNull(),
+  orderIndex: integer("order_index").notNull().default(0), // For ordering books in UI
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Chapters table - chapters within a book (e.g., "Anatomy", "Physiology")
+export const chapters = pgTable("chapters", {
+  id: serial("id").primaryKey(),
+  bookId: integer("book_id")
+    .references(() => books.id, { onDelete: "cascade" })
+    .notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  orderIndex: integer("order_index").notNull().default(0), // For ordering chapters within book
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Papers table - represents a collection of questions (section within a chapter)
+// Papers are global (shared across all users), access is controlled by accessTier or inherited from book
 export const papers = pgTable("papers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   source: text("source").notNull(), // e.g., "SK Book", "AA Book"
+  // Hierarchical structure (nullable for backward compatibility)
+  bookId: integer("book_id").references(() => books.id, {
+    onDelete: "cascade",
+  }),
+  chapterId: integer("chapter_id").references(() => chapters.id, {
+    onDelete: "cascade",
+  }),
+  orderIndex: integer("order_index").notNull().default(0), // For ordering within chapter
   questionCount: integer("question_count").notNull().default(0),
   accessTier: text("access_tier")
     .$type<"free" | "premium">()
@@ -173,7 +207,28 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
 }));
 
 // Application relations
-export const papersRelations = relations(papers, ({ many }) => ({
+export const booksRelations = relations(books, ({ many }) => ({
+  chapters: many(chapters),
+  papers: many(papers),
+}));
+
+export const chaptersRelations = relations(chapters, ({ one, many }) => ({
+  book: one(books, {
+    fields: [chapters.bookId],
+    references: [books.id],
+  }),
+  papers: many(papers),
+}));
+
+export const papersRelations = relations(papers, ({ one, many }) => ({
+  book: one(books, {
+    fields: [papers.bookId],
+    references: [books.id],
+  }),
+  chapter: one(chapters, {
+    fields: [papers.chapterId],
+    references: [chapters.id],
+  }),
   questions: many(questions),
   testSessions: many(testSessions),
 }));
@@ -202,6 +257,12 @@ export const testSessionsRelations = relations(testSessions, ({ one }) => ({
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export type Book = typeof books.$inferSelect;
+export type NewBook = typeof books.$inferInsert;
+
+export type Chapter = typeof chapters.$inferSelect;
+export type NewChapter = typeof chapters.$inferInsert;
 
 export type Paper = typeof papers.$inferSelect;
 export type NewPaper = typeof papers.$inferInsert;
