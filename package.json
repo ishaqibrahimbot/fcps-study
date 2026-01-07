@@ -18,6 +18,7 @@
     "import": "npx tsx scripts/import.ts",
     "import-book": "npx tsx scripts/import-book.ts",
     "explain": "npx tsx scripts/generate-explanations.ts",
+    "explain-book": "npx tsx scripts/explain-book.ts",
     "set-subscription": "npx tsx scripts/set-subscription.ts",
     "migrate-access": "npx tsx scripts/migrate-access-system.ts"
   },

@@ -33,6 +33,22 @@ interface SectionEntry {
   end: number;
   outputFile?: string;
   status?: "pending" | "completed" | "failed";
+  // Explanation fields
+  explainedFile?: string;
+  explanationStatus?: "pending" | "completed" | "failed";
+}
+
+// Get the best available file (prefer explained version)
+function getBestFile(section: SectionEntry): string | null {
+  // Prefer the explained file if explanations are complete
+  if (section.explanationStatus === "completed" && section.explainedFile) {
+    return section.explainedFile;
+  }
+  // Fall back to the raw output file
+  if (section.status === "completed" && section.outputFile) {
+    return section.outputFile;
+  }
+  return null;
 }
 
 interface ChapterEntry {
@@ -133,13 +149,13 @@ async function main() {
   if (hasChapters) {
     for (const chapter of bookMap.chapters!) {
       totalPapers += chapter.sections.filter(
-        (s) => s.status === "completed" && s.outputFile
+        (s) => getBestFile(s) !== null
       ).length;
     }
   }
   if (hasPapers) {
     totalPapers += bookMap.papers!.filter(
-      (p) => p.status === "completed" && p.outputFile
+      (p) => getBestFile(p) !== null
     ).length;
   }
 
@@ -161,8 +177,11 @@ async function main() {
       for (const chapter of bookMap.chapters!) {
         console.log(`\n   📁 Chapter: ${chapter.name}`);
         for (const section of chapter.sections) {
-          if (section.status === "completed" && section.outputFile) {
-            console.log(`      📄 ${section.name} (${section.outputFile})`);
+          const file = getBestFile(section);
+          if (file) {
+            const hasExplanations = section.explanationStatus === "completed";
+            const badge = hasExplanations ? "✨" : "📄";
+            console.log(`      ${badge} ${section.name} (${file})`);
           }
         }
       }
@@ -171,8 +190,11 @@ async function main() {
     if (hasPapers) {
       console.log(`\n   📁 Standalone Papers:`);
       for (const paper of bookMap.papers!) {
-        if (paper.status === "completed" && paper.outputFile) {
-          console.log(`      📄 ${paper.name} (${paper.outputFile})`);
+        const file = getBestFile(paper);
+        if (file) {
+          const hasExplanations = paper.explanationStatus === "completed";
+          const badge = hasExplanations ? "✨" : "📄";
+          console.log(`      ${badge} ${paper.name} (${file})`);
         }
       }
     }
@@ -243,15 +265,20 @@ async function main() {
       ) {
         const section = chapterData.sections[sectionIdx];
 
-        if (section.status !== "completed" || !section.outputFile) {
+        const fileToImport = getBestFile(section);
+        if (!fileToImport) {
           console.log(`   ⏭️  Skipping ${section.name} (not completed)`);
           continue;
         }
 
-        console.log(`   📄 Importing: ${section.name}`);
+        const hasExplanations = section.explanationStatus === "completed";
+        const badge = hasExplanations ? "✨" : "📄";
+        console.log(
+          `   ${badge} Importing: ${section.name}${hasExplanations ? " (with explanations)" : ""}`
+        );
 
         // Load paper data from JSON file
-        const paperData = await loadPaperFromFile(section.outputFile);
+        const paperData = await loadPaperFromFile(fileToImport);
         if (!paperData) {
           failedCount++;
           continue;
@@ -300,15 +327,20 @@ async function main() {
     for (let paperIdx = 0; paperIdx < bookMap.papers!.length; paperIdx++) {
       const paperEntry = bookMap.papers![paperIdx];
 
-      if (paperEntry.status !== "completed" || !paperEntry.outputFile) {
+      const fileToImport = getBestFile(paperEntry);
+      if (!fileToImport) {
         console.log(`   ⏭️  Skipping ${paperEntry.name} (not completed)`);
         continue;
       }
 
-      console.log(`   📄 Importing: ${paperEntry.name}`);
+      const hasExplanations = paperEntry.explanationStatus === "completed";
+      const badge = hasExplanations ? "✨" : "📄";
+      console.log(
+        `   ${badge} Importing: ${paperEntry.name}${hasExplanations ? " (with explanations)" : ""}`
+      );
 
       // Load paper data from JSON file
-      const paperData = await loadPaperFromFile(paperEntry.outputFile);
+      const paperData = await loadPaperFromFile(fileToImport);
       if (!paperData) {
         failedCount++;
         continue;
