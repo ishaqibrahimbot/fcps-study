@@ -223,7 +223,6 @@ async function main() {
       name: bookMap.source,
       description: bookMap.description || null,
       coverImage: bookMap.coverImage || null,
-      accessTier,
     })
     .returning();
 

@@ -99,15 +99,12 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
 // ============================================
 
 // Books table - top-level collection (e.g., "AA Notes 3rd Edition", "SK Book Series")
+// Access control is at the paper level, not book level
 export const books = pgTable("books", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
   coverImage: text("cover_image"), // URL to cover image
-  accessTier: text("access_tier")
-    .$type<"free" | "premium">()
-    .default("premium")
-    .notNull(),
   orderIndex: integer("order_index").notNull().default(0), // For ordering books in UI
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -125,7 +122,7 @@ export const chapters = pgTable("chapters", {
 });
 
 // Papers table - represents a collection of questions (section within a chapter)
-// Papers are global (shared across all users), access is controlled by accessTier or inherited from book
+// Papers are global (shared across all users), access is controlled by accessTier
 export const papers = pgTable("papers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),

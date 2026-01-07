@@ -1,66 +1,225 @@
 import { Link, useLoaderData, Form, redirect } from "react-router";
 import { db } from "~/db";
-import { papers, testSessions } from "~/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { books, chapters, papers, testSessions } from "~/db/schema";
+import { desc, eq, asc, isNull } from "drizzle-orm";
 import type { Route } from "./+types/dashboard";
 import { requireAuth } from "~/lib/require-auth.server";
 import { createLogoutCookie } from "~/lib/auth.server";
 import { canAccessPaper } from "~/lib/access-control.server";
+import { Accordion } from "~/components";
+
+interface PaperWithProgress {
+  id: number;
+  name: string;
+  source: string;
+  questionCount: number;
+  accessTier: "free" | "premium";
+  bookId: number | null;
+  chapterId: number | null;
+  orderIndex: number;
+  hasAccess: boolean;
+  latestSession: {
+    id: number;
+    status: "in_progress" | "completed";
+    mode: "test" | "learning";
+  } | null;
+  completedCount: number;
+  bestScore: number | null;
+}
+
+interface ChapterWithPapers {
+  id: number;
+  name: string;
+  description: string | null;
+  orderIndex: number;
+  papers: PaperWithProgress[];
+}
+
+interface BookWithContent {
+  id: number;
+  name: string;
+  description: string | null;
+  orderIndex: number;
+  chapters: ChapterWithPapers[];
+  standalonePapers: PaperWithProgress[]; // Papers in book but not in a chapter
+  totalQuestions: number;
+  totalPapers: number;
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireAuth(request);
 
-  // Fetch ALL papers (global, not per-user)
+  // Fetch all books with ordering
+  const allBooks = await db
+    .select()
+    .from(books)
+    .orderBy(asc(books.orderIndex), desc(books.createdAt));
+
+  // Fetch all chapters
+  const allChapters = await db
+    .select()
+    .from(chapters)
+    .orderBy(asc(chapters.orderIndex));
+
+  // Fetch all papers
   const allPapers = await db
     .select()
     .from(papers)
-    .orderBy(desc(papers.createdAt));
+    .orderBy(asc(papers.orderIndex), desc(papers.createdAt));
 
-  // Get latest session for each paper (scoped to current user)
-  const papersWithProgress = await Promise.all(
-    allPapers.map(async (paper) => {
-      const sessions = await db
-        .select()
-        .from(testSessions)
-        .where(eq(testSessions.paperId, paper.id))
-        .orderBy(desc(testSessions.startedAt));
+  // Fetch user's sessions
+  const userSessions = await db
+    .select()
+    .from(testSessions)
+    .where(eq(testSessions.userId, user.id))
+    .orderBy(desc(testSessions.startedAt));
 
-      // Filter sessions to only current user's sessions
-      const userSessions = sessions.filter((s) => s.userId === user.id);
-      const latestSession = userSessions[0];
-      const completedSessions = userSessions.filter(
-        (s) => s.status === "completed"
-      );
-      const bestScore =
-        completedSessions.length > 0
-          ? Math.max(...completedSessions.map((s) => s.score || 0))
-          : null;
+  // Helper to get paper progress
+  const getPaperProgress = (paperId: number) => {
+    const paperSessions = userSessions.filter((s) => s.paperId === paperId);
+    const latestSession = paperSessions[0] || null;
+    const completedSessions = paperSessions.filter(
+      (s) => s.status === "completed"
+    );
+    const bestScore =
+      completedSessions.length > 0
+        ? Math.max(...completedSessions.map((s) => s.score || 0))
+        : null;
 
-      // Check if user can access this paper
-      const hasAccess = canAccessPaper(user, paper);
+    return {
+      latestSession: latestSession
+        ? {
+            id: latestSession.id,
+            status: latestSession.status,
+            mode: latestSession.mode,
+          }
+        : null,
+      completedCount: completedSessions.length,
+      bestScore,
+    };
+  };
 
-      return {
-        ...paper,
-        latestSession: latestSession || null,
-        completedCount: completedSessions.length,
-        bestScore,
-        hasAccess,
-      };
-    })
-  );
+  // Build paper with progress
+  const buildPaperWithProgress = (paper: typeof allPapers[0]): PaperWithProgress => {
+    const progress = getPaperProgress(paper.id);
+    return {
+      id: paper.id,
+      name: paper.name,
+      source: paper.source,
+      questionCount: paper.questionCount,
+      accessTier: paper.accessTier,
+      bookId: paper.bookId,
+      chapterId: paper.chapterId,
+      orderIndex: paper.orderIndex,
+      hasAccess: canAccessPaper(user, paper),
+      ...progress,
+    };
+  };
 
   // Sort papers: for free users, show free papers first
-  const sortedPapers = papersWithProgress.sort((a, b) => {
+  const sortPapers = (papers: PaperWithProgress[]): PaperWithProgress[] => {
     if (user.subscriptionStatus === "free") {
-      // Free papers first, then premium
-      if (a.accessTier === "free" && b.accessTier !== "free") return -1;
-      if (a.accessTier !== "free" && b.accessTier === "free") return 1;
+      return [...papers].sort((a, b) => {
+        // Free papers first
+        if (a.accessTier === "free" && b.accessTier !== "free") return -1;
+        if (a.accessTier !== "free" && b.accessTier === "free") return 1;
+        // Then by order index
+        return a.orderIndex - b.orderIndex;
+      });
     }
-    // Within same tier, sort by creation date (newest first)
-    return b.createdAt.getTime() - a.createdAt.getTime();
+    // Subscribed users: just sort by order index
+    return [...papers].sort((a, b) => a.orderIndex - b.orderIndex);
+  };
+
+  // Build hierarchical structure
+  const booksWithContent: BookWithContent[] = allBooks.map((book) => {
+    // Get chapters for this book
+    const bookChapters = allChapters.filter((c) => c.bookId === book.id);
+
+    // Build chapters with their papers
+    const chaptersWithPapers: ChapterWithPapers[] = bookChapters.map(
+      (chapter) => {
+        const chapterPapers = allPapers
+          .filter((p) => p.chapterId === chapter.id)
+          .map(buildPaperWithProgress);
+
+        return {
+          id: chapter.id,
+          name: chapter.name,
+          description: chapter.description,
+          orderIndex: chapter.orderIndex,
+          papers: sortPapers(chapterPapers),
+        };
+      }
+    );
+
+    // Get standalone papers (in book but not in any chapter)
+    const bookStandalonePapers = sortPapers(
+      allPapers
+        .filter((p) => p.bookId === book.id && p.chapterId === null)
+        .map(buildPaperWithProgress)
+    );
+
+    // Calculate totals
+    const allBookPapers = [
+      ...chaptersWithPapers.flatMap((c) => c.papers),
+      ...bookStandalonePapers,
+    ];
+    const totalQuestions = allBookPapers.reduce(
+      (sum, p) => sum + p.questionCount,
+      0
+    );
+
+    return {
+      id: book.id,
+      name: book.name,
+      description: book.description,
+      orderIndex: book.orderIndex,
+      chapters: chaptersWithPapers,
+      standalonePapers: bookStandalonePapers,
+      totalQuestions,
+      totalPapers: allBookPapers.length,
+    };
   });
 
-  return { papers: sortedPapers, user };
+  // Get standalone papers (not in any book)
+  const standalonePapers = sortPapers(
+    allPapers
+      .filter((p) => p.bookId === null)
+      .map(buildPaperWithProgress)
+  );
+
+  // Calculate stats
+  const allPapersWithProgress = [
+    ...booksWithContent.flatMap((b) => [
+      ...b.chapters.flatMap((c) => c.papers),
+      ...b.standalonePapers,
+    ]),
+    ...standalonePapers,
+  ];
+
+  const totalPapers = allPapersWithProgress.length;
+  const totalQuestions = allPapersWithProgress.reduce(
+    (sum, p) => sum + p.questionCount,
+    0
+  );
+  const accessiblePapers = allPapersWithProgress.filter((p) => p.hasAccess);
+  const completedPapers = accessiblePapers.filter((p) => p.completedCount > 0);
+  const inProgressPapers = accessiblePapers.filter(
+    (p) => p.latestSession?.status === "in_progress"
+  );
+
+  return {
+    books: booksWithContent,
+    standalonePapers,
+    user,
+    stats: {
+      totalPapers,
+      totalQuestions,
+      completedCount: completedPapers.length,
+      inProgressCount: inProgressPapers.length,
+    },
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -85,17 +244,94 @@ export function meta() {
   ];
 }
 
-export default function Dashboard() {
-  const { papers, user } = useLoaderData<typeof loader>();
+// Paper card component
+function PaperCard({ paper }: { paper: PaperWithProgress }) {
+  return (
+    <Link
+      to={`/paper/${paper.id}`}
+      className={`block px-4 py-3 mx-2 mb-2 rounded-xl transition-all ${
+        paper.hasAccess
+          ? "bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm"
+          : "bg-slate-50/50 dark:bg-slate-800/30 opacity-75"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`text-sm font-medium ${
+                paper.hasAccess
+                  ? "text-slate-900 dark:text-white"
+                  : "text-slate-600 dark:text-slate-400"
+              }`}
+            >
+              {paper.name}
+            </span>
+            {!paper.hasAccess && (
+              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded">
+                🔒 Premium
+              </span>
+            )}
+            {paper.hasAccess && paper.accessTier === "free" && (
+              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success-100 dark:bg-success-900/40 text-success-700 dark:text-success-400 rounded">
+                Free
+              </span>
+            )}
+            {paper.hasAccess && paper.latestSession?.status === "in_progress" && (
+              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-warning-100 dark:bg-warning-900/40 text-warning-700 dark:text-warning-400 rounded">
+                In Progress
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+            <span>{paper.questionCount} Qs</span>
+            {paper.hasAccess && paper.bestScore !== null && (
+              <span className="text-success-600 dark:text-success-400">
+                Best: {Math.round((paper.bestScore / paper.questionCount) * 100)}%
+              </span>
+            )}
+          </div>
+        </div>
+        <svg
+          className={`w-4 h-4 shrink-0 ${
+            paper.hasAccess
+              ? "text-slate-400"
+              : "text-amber-500"
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 5l7 7-7 7"
+          />
+        </svg>
+      </div>
+    </Link>
+  );
+}
 
-  const accessiblePapers = papers.filter((p) => p.hasAccess);
+export default function Dashboard() {
+  const { books, standalonePapers, user, stats } =
+    useLoaderData<typeof loader>();
+
   const isSubscribed = user.subscriptionStatus === "subscribed";
 
-  // Check if user needs to verify email (not verified and created within last 7 days)
+  // Check if user needs to verify email
   const needsEmailVerification = !user.emailVerified;
   const createdAt = new Date(user.createdAt);
-  const sevenDaysFromCreation = new Date(createdAt.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const daysRemaining = Math.max(0, Math.ceil((sevenDaysFromCreation.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+  const sevenDaysFromCreation = new Date(
+    createdAt.getTime() + 7 * 24 * 60 * 60 * 1000
+  );
+  const daysRemaining = Math.max(
+    0,
+    Math.ceil(
+      (sevenDaysFromCreation.getTime() - Date.now()) / (24 * 60 * 60 * 1000)
+    )
+  );
 
   return (
     <div className="min-h-screen">
@@ -125,9 +361,15 @@ export default function Dashboard() {
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
                   {daysRemaining > 0 ? (
-                    <>You have <strong>{daysRemaining} day{daysRemaining !== 1 ? 's' : ''}</strong> remaining to verify your email ({user.email}). Check your inbox or spam folder for the verification link.</>
+                    <>
+                      You have{" "}
+                      <strong>
+                        {daysRemaining} day{daysRemaining !== 1 ? "s" : ""}
+                      </strong>{" "}
+                      remaining to verify your email ({user.email}).
+                    </>
                   ) : (
-                    <>Your verification period has expired. Please check your inbox or spam folder for the verification link.</>
+                    <>Your verification period has expired.</>
                   )}
                 </p>
               </div>
@@ -156,21 +398,21 @@ export default function Dashboard() {
               </svg>
             </div>
             <p className="text-sm text-primary-800 dark:text-primary-200">
-              Have a request? Facing a problem? Reach out to me at{" "}
+              Have a request?{" "}
               <a
                 href="mailto:ishaqibrahimbss@gmail.com"
-                className="font-medium underline hover:text-primary-600 dark:hover:text-primary-300"
+                className="font-medium underline"
               >
-                ishaqibrahimbss@gmail.com
+                Email
               </a>{" "}
               or{" "}
               <a
                 href="https://wa.me/923416110684"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-medium underline hover:text-primary-600 dark:hover:text-primary-300"
+                className="font-medium underline"
               >
-                WhatsApp me at +923416110684
+                WhatsApp
               </a>
             </p>
           </div>
@@ -212,7 +454,7 @@ export default function Dashboard() {
               {!isSubscribed && (
                 <Link
                   to="/upgrade"
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-800/30 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50 rounded-lg hover:from-amber-200 hover:to-amber-100 dark:hover:from-amber-900/60 dark:hover:to-amber-800/50 transition-all"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-800/30 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50 rounded-lg hover:from-amber-200 hover:to-amber-100 transition-all"
                 >
                   <span>👑</span>
                   Upgrade
@@ -272,7 +514,6 @@ export default function Dashboard() {
             to="/upgrade"
             className="block mb-6 sm:mb-8 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white hover:from-amber-600 hover:to-amber-700 transition-all group relative overflow-hidden"
           >
-            {/* Early bird badge */}
             <div className="absolute top-0 right-0 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-bl-xl text-xs sm:text-sm font-semibold">
               🎁 First 10 users get FREE lifetime access!
             </div>
@@ -284,8 +525,7 @@ export default function Dashboard() {
                     Upgrade to Premium
                   </h3>
                   <p className="text-amber-100 text-sm sm:text-base">
-                    Unlock all {papers.filter((p) => !p.hasAccess).length}{" "}
-                    premium papers with detailed explanations
+                    Unlock all books and papers with detailed explanations
                   </p>
                 </div>
               </div>
@@ -312,7 +552,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
-              {papers.length}
+              {stats.totalPapers}
             </p>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               Total Papers
@@ -320,7 +560,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-2xl sm:text-3xl font-bold text-primary-500">
-              {papers.reduce((acc, p) => acc + p.questionCount, 0)}
+              {stats.totalQuestions}
             </p>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               Total Questions
@@ -328,7 +568,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-2xl sm:text-3xl font-bold text-success-500">
-              {accessiblePapers.filter((p) => p.completedCount > 0).length}
+              {stats.completedCount}
             </p>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               Completed
@@ -336,11 +576,7 @@ export default function Dashboard() {
           </div>
           <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800">
             <p className="text-2xl sm:text-3xl font-bold text-warning-500">
-              {
-                accessiblePapers.filter(
-                  (p) => p.latestSession?.status === "in_progress"
-                ).length
-              }
+              {stats.inProgressCount}
             </p>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               In Progress
@@ -348,10 +584,10 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Papers list */}
+        {/* Content */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-4">
           <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
-            Available Papers
+            Study Materials
           </h2>
           <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 rounded-full">
@@ -361,7 +597,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {papers.length === 0 ? (
+        {books.length === 0 && standalonePapers.length === 0 ? (
           <div className="text-center py-12 sm:py-16 bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800">
             <div className="w-14 h-14 sm:w-16 sm:h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg
@@ -374,110 +610,42 @@ export default function Dashboard() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
                 />
               </svg>
             </div>
             <h3 className="text-base sm:text-lg font-medium text-slate-900 dark:text-white mb-2">
-              No papers yet
+              No content yet
             </h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 px-4">
-              Papers will appear here once they are imported.
+              Books and papers will appear here once they are imported.
             </p>
           </div>
         ) : (
-          <div className="space-y-3 sm:space-y-4">
-            {papers.map((paper) => (
-              <Link
-                key={paper.id}
-                to={`/paper/${paper.id}`}
-                className={`block bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-4 sm:p-6 border transition-all duration-200 group touch-manipulation ${
-                  paper.hasAccess
-                    ? "border-slate-200 dark:border-slate-800 hover:border-primary-300 dark:hover:border-primary-700 hover:shadow-lg hover:shadow-primary-500/5"
-                    : "border-slate-200/50 dark:border-slate-800/50 opacity-75"
-                }`}
+          <div className="space-y-4">
+            {/* Books */}
+            {books.map((book) => (
+              <div
+                key={book.id}
+                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1.5 sm:mb-2">
-                      <h3
-                        className={`text-base sm:text-lg font-semibold transition-colors ${
-                          paper.hasAccess
-                            ? "text-slate-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400"
-                            : "text-slate-600 dark:text-slate-400"
-                        }`}
-                      >
-                        {paper.name}
-                      </h3>
-                      {!paper.hasAccess && (
-                        <span className="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-amber-400 to-amber-500 text-amber-900 rounded-full flex items-center gap-1">
-                          <svg
-                            className="w-3 h-3"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                          Premium
-                        </span>
-                      )}
-                      {paper.hasAccess && paper.accessTier === "free" && (
-                        <span className="px-2 py-0.5 text-xs font-medium bg-success-500/10 text-success-600 dark:text-success-400 rounded-full">
-                          Free
-                        </span>
-                      )}
-                      {paper.hasAccess &&
-                        paper.latestSession?.status === "in_progress" && (
-                          <span className="px-2 py-0.5 text-xs font-medium bg-warning-500/10 text-warning-500 rounded-full">
-                            In Progress
-                          </span>
-                        )}
-                      {paper.hasAccess && paper.completedCount > 0 && (
-                        <span className="px-2 py-0.5 text-xs font-medium bg-success-500/10 text-success-500 rounded-full">
-                          Completed
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-2 sm:mb-3">
-                      Source: {paper.source}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm">
-                      <span className="text-slate-600 dark:text-slate-300">
-                        <span className="font-medium">
-                          {paper.questionCount}
-                        </span>{" "}
-                        questions
+                <Accordion
+                  title={
+                    <div>
+                      <span className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
+                        {book.name}
                       </span>
-                      {paper.hasAccess && paper.bestScore !== null && (
-                        <span className="text-success-500">
-                          Best:{" "}
-                          {Math.round(
-                            (paper.bestScore / paper.questionCount) * 100
-                          )}
-                          %
-                        </span>
-                      )}
-                      {paper.hasAccess && paper.completedCount > 0 && (
-                        <span className="text-slate-500 dark:text-slate-400">
-                          {paper.completedCount} attempts
-                        </span>
+                      {book.description && (
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          {book.description}
+                        </p>
                       )}
                     </div>
-                  </div>
-                  <div
-                    className={`shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors ${
-                      paper.hasAccess
-                        ? "bg-slate-100 dark:bg-slate-800 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/40"
-                        : "bg-amber-100 dark:bg-amber-900/30"
-                    }`}
-                  >
-                    {paper.hasAccess ? (
+                  }
+                  icon={
+                    <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center">
                       <svg
-                        className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 group-hover:text-primary-500 transition-colors"
+                        className="w-5 h-5 text-white"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -486,30 +654,103 @@ export default function Dashboard() {
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           strokeWidth={2}
-                          d="M9 5l7 7-7 7"
+                          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
                         />
                       </svg>
-                    ) : (
-                      <svg
-                        className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
+                    </div>
+                  }
+                  badge={
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {book.totalPapers} papers • {book.totalQuestions} Qs
+                    </span>
+                  }
+                >
+                  <div className="px-2">
+                    {/* Chapters */}
+                    {book.chapters.map((chapter) => (
+                      <div
+                        key={chapter.id}
+                        className="border-l-2 border-slate-200 dark:border-slate-700 ml-5"
                       >
-                        <path
-                          fillRule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
+                        <Accordion
+                          title={
+                            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                              {chapter.name}
+                            </span>
+                          }
+                          badge={
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                              {chapter.papers.length} papers
+                            </span>
+                          }
+                          className="pl-4"
+                        >
+                          <div className="pl-4">
+                            {chapter.papers.map((paper) => (
+                              <PaperCard key={paper.id} paper={paper} />
+                            ))}
+                          </div>
+                        </Accordion>
+                      </div>
+                    ))}
+
+                    {/* Standalone papers in book */}
+                    {book.standalonePapers.length > 0 && (
+                      <div className="ml-5 mt-2">
+                        {book.standalonePapers.map((paper) => (
+                          <PaperCard key={paper.id} paper={paper} />
+                        ))}
+                      </div>
                     )}
                   </div>
-                </div>
-              </Link>
+                </Accordion>
+              </div>
             ))}
+
+            {/* Standalone papers (not in any book) */}
+            {standalonePapers.length > 0 && (
+              <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <Accordion
+                  title={
+                    <span className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
+                      Other Papers
+                    </span>
+                  }
+                  icon={
+                    <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded-xl flex items-center justify-center">
+                      <svg
+                        className="w-5 h-5 text-slate-600 dark:text-slate-300"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                        />
+                      </svg>
+                    </div>
+                  }
+                  badge={
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {standalonePapers.length} papers
+                    </span>
+                  }
+                  defaultOpen={books.length === 0}
+                >
+                  <div className="px-2">
+                    {standalonePapers.map((paper) => (
+                      <PaperCard key={paper.id} paper={paper} />
+                    ))}
+                  </div>
+                </Accordion>
+              </div>
+            )}
           </div>
         )}
       </main>
     </div>
   );
 }
-
