@@ -21,7 +21,8 @@
     "explain-book": "npx tsx scripts/explain-book.ts",
     "set-subscription": "npx tsx scripts/set-subscription.ts",
     "seed-books": "npx tsx scripts/seed-books.ts",
-    "migrate-to-credits": "npx tsx scripts/migrate-to-credits.ts"
+    "migrate-to-credits": "npx tsx scripts/migrate-to-credits.ts",
+    "send-email": "npx tsx scripts/send-email-blast.ts"
   },
   "dependencies": {
     "@google/genai": "^1.34.0",
