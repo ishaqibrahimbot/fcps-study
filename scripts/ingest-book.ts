@@ -184,7 +184,7 @@ function flattenBookMap(bookMap: BookMap): FlatSection[] {
   return flattened;
 }
 
-// Update section in book map
+// Update section in book map (in-memory)
 function updateSection(
   bookMap: BookMap,
   flatSection: FlatSection,
@@ -197,6 +197,30 @@ function updateSection(
     const { paperIdx } = flatSection.mapPath;
     Object.assign(bookMap.papers![paperIdx], updates);
   }
+}
+
+// Atomic save: re-read fresh state, update only this section, write back
+// This prevents race conditions when multiple processes write to the same map file
+async function atomicSaveSection(
+  mapPath: string,
+  flatSection: FlatSection,
+  updates: Partial<SectionEntry>
+): Promise<void> {
+  // Read the latest state from disk
+  const freshContent = await fs.readFile(mapPath, "utf-8");
+  const freshMap: BookMap = JSON.parse(freshContent);
+
+  // Update only this specific section
+  if (flatSection.mapPath.type === "chapter") {
+    const { chapterIdx, sectionIdx } = flatSection.mapPath;
+    Object.assign(freshMap.chapters![chapterIdx].sections[sectionIdx], updates);
+  } else {
+    const { paperIdx } = flatSection.mapPath;
+    Object.assign(freshMap.papers![paperIdx], updates);
+  }
+
+  // Write back to disk
+  await fs.writeFile(mapPath, JSON.stringify(freshMap, null, 2));
 }
 
 async function main() {
@@ -337,26 +361,30 @@ async function main() {
     const result = await runIngestScript(args);
 
     if (result.success) {
-      updateSection(bookMap, flatSection, {
-        status: "completed",
+      const updates = {
+        status: "completed" as const,
         outputFile: result.outputFile,
         completedAt: new Date().toISOString(),
         error: undefined,
-      });
+      };
+      // Update in-memory for display purposes
+      updateSection(bookMap, flatSection, updates);
+      // Atomic save to disk (re-reads fresh state to avoid race conditions)
+      await atomicSaveSection(mapPath, flatSection, updates);
       completed++;
       console.log(`\n   ✅ Completed: ${section.name}`);
     } else {
-      updateSection(bookMap, flatSection, {
-        status: "failed",
+      const updates = {
+        status: "failed" as const,
         error: result.error,
-      });
+      };
+      updateSection(bookMap, flatSection, updates);
+      await atomicSaveSection(mapPath, flatSection, updates);
       failed++;
       console.log(`\n   ❌ Failed: ${section.name}`);
       console.log(`   Error: ${result.error}`);
     }
 
-    // Save updated map after each section
-    await fs.writeFile(mapPath, JSON.stringify(bookMap, null, 2));
     console.log(`   💾 Map updated`);
   }
 
