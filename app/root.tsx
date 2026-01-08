@@ -5,11 +5,18 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
 import { NavigationProgress } from "./components/NavigationProgress";
+
+export function loader() {
+  return {
+    maintenanceMode: process.env.MAINTENANCE_MODE === "true",
+  };
+}
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -42,7 +49,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function MaintenancePage() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
+      <div className="text-center max-w-md">
+        <div className="text-6xl mb-6">🔧</div>
+        <h1 className="text-3xl font-bold text-white mb-4">
+          Under Maintenance
+        </h1>
+        <p className="text-slate-400 mb-6">
+          We're making some quick improvements. Please check back in a few minutes!
+        </p>
+        <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-full text-slate-300 text-sm">
+          <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>
+          Working on it...
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const { maintenanceMode } = useLoaderData<typeof loader>();
+
+  if (maintenanceMode) {
+    return <MaintenancePage />;
+  }
+
   return (
     <>
       <NavigationProgress />
