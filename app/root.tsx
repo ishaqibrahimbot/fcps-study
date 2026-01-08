@@ -58,7 +58,8 @@ function MaintenancePage() {
           Under Maintenance
         </h1>
         <p className="text-slate-400 mb-6">
-          We're making some quick improvements. Please check back in a few minutes!
+          We're making some quick improvements. Please check back in a few
+          minutes!
         </p>
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-full text-slate-300 text-sm">
           <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></span>

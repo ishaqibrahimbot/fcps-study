@@ -9,7 +9,8 @@ export type AuthenticatedUser = {
   name: string | null;
   email: string;
   image: string | null;
-  subscriptionStatus: "free" | "subscribed";
+  subscriptionStatus: "free" | "lifetime";
+  credits: number;
   emailVerified: Date | null;
   createdAt: Date;
 };
@@ -34,6 +35,7 @@ export async function requireAuth(
     where: eq(users.id, session.userId),
     columns: {
       subscriptionStatus: true,
+      credits: true,
       emailVerified: true,
       createdAt: true,
     },
@@ -45,6 +47,7 @@ export async function requireAuth(
     email: session.email,
     image: session.image ?? null,
     subscriptionStatus: user?.subscriptionStatus ?? "free",
+    credits: user?.credits ?? 0,
     emailVerified: user?.emailVerified ?? null,
     createdAt: user?.createdAt ?? new Date(),
   };
@@ -68,6 +71,7 @@ export async function getOptionalUser(
     where: eq(users.id, session.userId),
     columns: {
       subscriptionStatus: true,
+      credits: true,
       emailVerified: true,
       createdAt: true,
     },
@@ -79,6 +83,7 @@ export async function getOptionalUser(
     email: session.email,
     image: session.image ?? null,
     subscriptionStatus: user?.subscriptionStatus ?? "free",
+    credits: user?.credits ?? 0,
     emailVerified: user?.emailVerified ?? null,
     createdAt: user?.createdAt ?? new Date(),
   };

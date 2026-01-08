@@ -1,50 +1,64 @@
-import type { User, Paper } from "~/db/schema";
-
 /**
- * Check if a user can access a specific paper based on their subscription status
- * and the paper's access tier.
+ * Access control for the credits-based paper unlock system.
  *
  * Access rules:
- * - Subscribed users can access all papers (free and premium)
- * - Free users can only access papers marked as "free"
+ * - Lifetime users can access all papers
+ * - Free users can only access papers they've unlocked with credits
+ */
+
+/**
+ * Check if a user can access a specific paper
  */
 export function canAccessPaper(
-  user: { subscriptionStatus: "free" | "subscribed" },
-  paper: { accessTier: "free" | "premium" }
+  user: { subscriptionStatus: "free" | "lifetime" },
+  paper: { id: number },
+  unlockedPaperIds: Set<number> | number[]
 ): boolean {
-  // Subscribed users have access to everything
-  if (user.subscriptionStatus === "subscribed") {
+  // Lifetime users have access to everything
+  if (user.subscriptionStatus === "lifetime") {
     return true;
   }
 
-  // Free users can only access free papers
-  return paper.accessTier === "free";
+  // Free users can only access papers they've unlocked
+  const unlockedSet =
+    unlockedPaperIds instanceof Set
+      ? unlockedPaperIds
+      : new Set(unlockedPaperIds);
+  return unlockedSet.has(paper.id);
 }
 
 /**
  * Filter papers to only include those the user can access
  */
-export function filterAccessiblePapers<
-  T extends { accessTier: "free" | "premium" },
->(user: { subscriptionStatus: "free" | "subscribed" }, papers: T[]): T[] {
-  if (user.subscriptionStatus === "subscribed") {
+export function filterAccessiblePapers<T extends { id: number }>(
+  user: { subscriptionStatus: "free" | "lifetime" },
+  papers: T[],
+  unlockedPaperIds: Set<number> | number[]
+): T[] {
+  if (user.subscriptionStatus === "lifetime") {
     return papers;
   }
-  return papers.filter((paper) => paper.accessTier === "free");
+  const unlockedSet =
+    unlockedPaperIds instanceof Set
+      ? unlockedPaperIds
+      : new Set(unlockedPaperIds);
+  return papers.filter((paper) => unlockedSet.has(paper.id));
 }
 
 /**
  * Get a display label for the subscription status
  */
-export function getSubscriptionLabel(status: "free" | "subscribed"): string {
-  return status === "subscribed" ? "Premium" : "Free";
+export function getSubscriptionLabel(status: "free" | "lifetime"): string {
+  return status === "lifetime" ? "Lifetime" : "Free";
 }
 
 /**
- * Check if a paper is premium (locked for free users)
+ * Check if a paper is locked for a user
  */
-export function isPremiumPaper(paper: {
-  accessTier: "free" | "premium";
-}): boolean {
-  return paper.accessTier === "premium";
+export function isPaperLocked(
+  user: { subscriptionStatus: "free" | "lifetime" },
+  paper: { id: number },
+  unlockedPaperIds: Set<number> | number[]
+): boolean {
+  return !canAccessPaper(user, paper, unlockedPaperIds);
 }

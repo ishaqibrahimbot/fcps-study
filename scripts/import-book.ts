@@ -16,11 +16,6 @@ program
     "Import a complete book with chapters and papers from a book map"
   )
   .requiredOption("-m, --map <path>", "Path to book map JSON file")
-  .option(
-    "-t, --tier <tier>",
-    "Default access tier for papers (free or premium)",
-    "premium"
-  )
   .option("--skip-existing", "Skip book if it already exists")
   .option("--dry-run", "Preview import without writing to database")
   .parse();
@@ -95,22 +90,12 @@ async function loadPaperFromFile(
 
 async function main() {
   const mapPath = path.resolve(options.map);
-  const accessTier = options.tier as "free" | "premium";
   const skipExisting = options.skipExisting || false;
   const isDryRun = options.dryRun || false;
-
-  // Validate tier
-  if (!["free", "premium"].includes(accessTier)) {
-    console.error(
-      `\n❌ Invalid tier: ${accessTier}. Must be 'free' or 'premium'.`
-    );
-    process.exit(1);
-  }
 
   console.log("\n📚 Book Import");
   console.log("=".repeat(50));
   console.log(`Map file: ${mapPath}`);
-  console.log(`Access Tier: ${accessTier}`);
   console.log(`Mode: ${isDryRun ? "DRY RUN" : "LIVE"}`);
   console.log("=".repeat(50));
 
@@ -293,7 +278,6 @@ async function main() {
             chapterId: insertedChapter.id,
             orderIndex: sectionIdx,
             questionCount: paperData.questions.length,
-            accessTier,
           })
           .returning();
 
@@ -355,7 +339,6 @@ async function main() {
           chapterId: null,
           orderIndex: paperIdx,
           questionCount: paperData.questions.length,
-          accessTier,
         })
         .returning();
 

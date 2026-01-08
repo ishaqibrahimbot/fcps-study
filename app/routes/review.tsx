@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useLoaderData, useSearchParams, Link, useFetcher } from "react-router";
 import { db } from "~/db";
-import { papers, questions, testSessions } from "~/db/schema";
+import { papers, questions, testSessions, userUnlockedPapers } from "~/db/schema";
 import { eq, and } from "drizzle-orm";
 import { QuestionCard } from "~/components";
 import type { Route } from "./+types/review";
@@ -33,10 +33,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response("Paper not found", { status: 404 });
   }
 
+  // Fetch user's unlocked papers
+  const unlockedPapersResult = await db
+    .select({ paperId: userUnlockedPapers.paperId })
+    .from(userUnlockedPapers)
+    .where(eq(userUnlockedPapers.userId, user.id));
+  const unlockedPaperIds = new Set(unlockedPapersResult.map((r) => r.paperId));
+
   // Verify user has access to this paper
-  if (!canAccessPaper(user, paper)) {
+  if (!canAccessPaper(user, paper, unlockedPaperIds)) {
     throw new Response(
-      "Access denied. Upgrade to premium to access this paper.",
+      "Access denied. Unlock this paper with credits first.",
       { status: 403 }
     );
   }
@@ -47,10 +54,19 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     .where(eq(questions.paperId, session.paperId))
     .orderBy(questions.orderIndex);
 
+  // Filter out incomplete questions
+  const completeQuestions = questionList.filter(
+    (q) =>
+      q.choices.length > 0 &&
+      q.correctChoice !== null &&
+      q.correctChoice >= 0 &&
+      q.correctChoice < q.choices.length
+  );
+
   return {
     session,
     paper,
-    questions: questionList,
+    questions: completeQuestions,
   };
 }
 

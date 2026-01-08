@@ -1,7 +1,7 @@
 import { Link, useLoaderData, Form, redirect } from "react-router";
 import { db } from "~/db";
-import { papers, questions, testSessions } from "~/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { papers, questions, testSessions, userUnlockedPapers, users } from "~/db/schema";
+import { eq, desc, and, sql } from "drizzle-orm";
 import type { Route } from "./+types/paper";
 import { requireAuth } from "~/lib/require-auth.server";
 import { canAccessPaper } from "~/lib/access-control.server";
@@ -17,8 +17,15 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response("Paper not found", { status: 404 });
   }
 
+  // Fetch user's unlocked papers
+  const unlockedPapersResult = await db
+    .select({ paperId: userUnlockedPapers.paperId })
+    .from(userUnlockedPapers)
+    .where(eq(userUnlockedPapers.userId, user.id));
+  const unlockedPaperIds = new Set(unlockedPapersResult.map((r) => r.paperId));
+
   // Check if user has access
-  const hasAccess = canAccessPaper(user, paper);
+  const hasAccess = canAccessPaper(user, paper, unlockedPaperIds);
 
   const questionList = await db
     .select()
@@ -26,14 +33,14 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     .where(eq(questions.paperId, paperId))
     .orderBy(questions.orderIndex);
 
-  // Count incomplete questions (empty choices or invalid correct choice)
-  const incompleteCount = questionList.filter(
+  // Filter to only complete questions (valid choices and correct answer)
+  const completeQuestions = questionList.filter(
     (q) =>
-      q.choices.length === 0 ||
-      q.correctChoice === null ||
-      q.correctChoice < 0 ||
-      q.correctChoice >= q.choices.length
-  ).length;
+      q.choices.length > 0 &&
+      q.correctChoice !== null &&
+      q.correctChoice >= 0 &&
+      q.correctChoice < q.choices.length
+  );
 
   // Get sessions for this user only
   const sessions = await db
@@ -50,8 +57,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   return {
     paper,
     hasAccess,
-    questionCount: questionList.length,
-    incompleteCount,
+    questionCount: completeQuestions.length,
     inProgressSession,
     completedSessions,
     user,
@@ -61,20 +67,71 @@ export async function loader({ params, request }: Route.LoaderArgs) {
 export async function action({ request, params }: Route.ActionArgs) {
   const user = await requireAuth(request);
   const formData = await request.formData();
+  const actionType = formData.get("_action");
   const mode = formData.get("mode") as "test" | "learning";
   const paperId = parseInt(params.paperId);
   const resumeSessionId = formData.get("resumeSessionId");
 
-  // Fetch paper and verify access
+  // Fetch paper
   const [paper] = await db.select().from(papers).where(eq(papers.id, paperId));
 
   if (!paper) {
     throw new Response("Paper not found", { status: 404 });
   }
 
-  if (!canAccessPaper(user, paper)) {
+  // Handle unlock action
+  if (actionType === "unlock") {
+    // Check if user has enough credits
+    if (user.credits < 1) {
+      return { error: "Not enough credits. Please purchase more credits." };
+    }
+
+    // Check if already unlocked
+    const [existing] = await db
+      .select()
+      .from(userUnlockedPapers)
+      .where(
+        and(
+          eq(userUnlockedPapers.userId, user.id),
+          eq(userUnlockedPapers.paperId, paperId)
+        )
+      );
+
+    if (existing) {
+      return { error: "Paper already unlocked." };
+    }
+
+    // Deduct credit (only if user still has credits - prevents race conditions)
+    const [updateResult] = await db
+      .update(users)
+      .set({ credits: sql`${users.credits} - 1` })
+      .where(and(eq(users.id, user.id), sql`${users.credits} >= 1`))
+      .returning({ credits: users.credits });
+
+    if (!updateResult) {
+      return { error: "Not enough credits. Please purchase more credits." };
+    }
+
+    // Insert unlock record
+    await db.insert(userUnlockedPapers).values({
+      userId: user.id,
+      paperId: paperId,
+    });
+
+    // Redirect to refresh the page with access
+    return redirect(`/paper/${paperId}`);
+  }
+
+  // Fetch user's unlocked papers to check access
+  const unlockedPapersResult = await db
+    .select({ paperId: userUnlockedPapers.paperId })
+    .from(userUnlockedPapers)
+    .where(eq(userUnlockedPapers.userId, user.id));
+  const unlockedPaperIds = new Set(unlockedPapersResult.map((r) => r.paperId));
+
+  if (!canAccessPaper(user, paper, unlockedPaperIds)) {
     throw new Response(
-      "Access denied. Upgrade to premium to access this paper.",
+      "Access denied. Unlock this paper with credits first.",
       { status: 403 }
     );
   }
@@ -131,9 +188,9 @@ export default function Paper() {
     paper,
     hasAccess,
     questionCount,
-    incompleteCount,
     inProgressSession,
     completedSessions,
+    user,
   } = useLoaderData<typeof loader>();
 
   const bestScore =
@@ -175,8 +232,8 @@ export default function Paper() {
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
               {paper.name}
             </h1>
-            {paper.accessTier === "premium" && (
-              <span className="px-3 py-1 text-xs font-medium bg-gradient-to-r from-amber-400 to-amber-500 text-amber-900 rounded-full flex items-center gap-1">
+            {!hasAccess && (
+              <span className="px-3 py-1 text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded-full flex items-center gap-1">
                 <svg
                   className="w-3 h-3"
                   fill="currentColor"
@@ -188,12 +245,7 @@ export default function Paper() {
                     clipRule="evenodd"
                   />
                 </svg>
-                Premium
-              </span>
-            )}
-            {paper.accessTier === "free" && (
-              <span className="px-3 py-1 text-xs font-medium bg-success-500/10 text-success-600 dark:text-success-400 rounded-full">
-                Free
+                Locked
               </span>
             )}
           </div>
@@ -231,12 +283,12 @@ export default function Paper() {
           </div>
         </div>
 
-        {/* No access - Premium upgrade prompt */}
+        {/* No access - Unlock with credits */}
         {!hasAccess && (
-          <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800/50 rounded-2xl p-8 mb-8 text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-800/20 border border-primary-200 dark:border-primary-800/50 rounded-2xl p-8 mb-8 text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-primary-400 to-primary-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg
-                className="w-8 h-8 text-amber-900"
+                className="w-8 h-8 text-white"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -248,88 +300,48 @@ export default function Paper() {
               </svg>
             </div>
             <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-              Premium Content
+              Unlock This Paper
             </h2>
-            <p className="text-slate-600 dark:text-slate-300 mb-6 max-w-md mx-auto">
-              This paper is available exclusively for premium members. Upgrade
-              your account to access all papers and unlock your full study
-              potential.
+            <p className="text-slate-600 dark:text-slate-300 mb-2 max-w-md mx-auto">
+              Use 1 credit to unlock this paper and access all {questionCount} questions.
+            </p>
+            <p className="text-sm text-primary-600 dark:text-primary-400 mb-6">
+              You have <span className="font-bold">{user.credits} credits</span> available
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                disabled
-                className="px-6 py-3 bg-gradient-to-r from-amber-400 to-amber-500 text-amber-900 font-semibold rounded-xl opacity-75 cursor-not-allowed"
-              >
-                Upgrade to Premium
-              </button>
+              {user.credits >= 1 ? (
+                <Form method="post">
+                  <input type="hidden" name="_action" value="unlock" />
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white font-semibold rounded-xl transition-all flex items-center gap-2"
+                  >
+                    <span>🎟️</span>
+                    Unlock for 1 Credit
+                  </button>
+                </Form>
+              ) : (
+                <Link
+                  to="/upgrade"
+                  className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-semibold rounded-xl transition-all flex items-center gap-2"
+                >
+                  <span>👑</span>
+                  Get More Credits
+                </Link>
+              )}
               <Link
-                to="/"
+                to="/dashboard"
                 className="px-6 py-3 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
-                Browse Free Papers
+                Back to Dashboard
               </Link>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-4">
-              Contact your administrator to upgrade your account.
-            </p>
           </div>
         )}
 
         {/* Only show the following if user has access */}
         {hasAccess && (
           <>
-            {/* Incomplete questions warning */}
-            {incompleteCount > 0 && (
-              <div className="bg-error-50 dark:bg-error-900/20 border border-error-500/30 rounded-2xl p-6 mb-8">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 bg-error-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                    <svg
-                      className="w-5 h-5 text-error-500"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                      />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
-                      {incompleteCount} Incomplete Question
-                      {incompleteCount > 1 ? "s" : ""}
-                    </h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">
-                      Some questions are missing choices or have invalid answers
-                      due to OCR issues. You can fix them manually.
-                    </p>
-                    <Link
-                      to={`/paper/${paper.id}/fix`}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-error-500 hover:bg-error-600 text-white font-medium rounded-xl transition-colors text-sm"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                        />
-                      </svg>
-                      Fix Manually
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Resume in-progress session */}
             {inProgressSession && (
               <div className="bg-warning-500/10 border border-warning-500/20 rounded-2xl p-6 mb-8">

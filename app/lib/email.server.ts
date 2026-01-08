@@ -125,12 +125,16 @@ export function generateToken(): string {
   return crypto.randomUUID() + crypto.randomUUID().replace(/-/g, "");
 }
 
+// Credit packages
+const CREDIT_PACKAGES = [
+  { id: "starter", name: "Starter", credits: 10, price: 1000 },
+  { id: "value", name: "Value", credits: 20, price: 1800 },
+  { id: "pro", name: "Pro", credits: 30, price: 2500 },
+  { id: "lifetime", name: "Lifetime", credits: null, price: 5000 },
+];
+
 // Payment/upgrade configuration
 const UPGRADE_CONFIG = {
-  // Pricing tiers
-  yearlyPrice: "PKR 3,000",
-  yearlyValidity: "31st July 2026",
-  lifetimePrice: "PKR 5,000",
   // Bank details
   bankName: "Habib Bank Limited",
   accountTitle: "Ishaq Ibrahim",
@@ -145,16 +149,21 @@ const UPGRADE_CONFIG = {
 
 export async function sendUpgradeInstructionsEmail(
   email: string,
-  userName: string | null
+  userName: string | null,
+  selectedPackage: string
 ): Promise<{ success: boolean; error?: string }> {
   const greeting = userName ? `Hi ${userName}` : "Hi there";
+  const pkg = CREDIT_PACKAGES.find((p) => p.name === selectedPackage) || CREDIT_PACKAGES[0];
+  const packageDescription = pkg.credits
+    ? `${pkg.name} Package (${pkg.credits} credits)`
+    : `${pkg.name} Package (All Papers Forever)`;
 
   try {
     // Send upgrade instructions to the user
     await resend.emails.send({
       from: `${APP_NAME} <${FROM_EMAIL}>`,
       to: email,
-      subject: `Upgrade to Premium - ${APP_NAME}`,
+      subject: `Get Credits - ${APP_NAME}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -163,36 +172,37 @@ export async function sendUpgradeInstructionsEmail(
             <meta name="viewport" content="width=device-width, initial-scale=1">
           </head>
           <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-              <h1 style="color: white; margin: 0; font-size: 24px;">🎉 Upgrade to Premium</h1>
+            <div style="background: linear-gradient(135deg, #2a87ff 0%, #0c50e1 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">🎟️ Get Credits</h1>
             </div>
             <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0; border-top: none;">
               <p style="margin-top: 0; font-size: 16px;">${greeting},</p>
               
-              <p>Thank you for your interest in upgrading to Premium! With Premium access, you'll unlock:</p>
+              <p>Thank you for your interest in getting credits! You selected:</p>
               
-              <ul style="background: #fef3c7; padding: 20px 20px 20px 40px; border-radius: 8px; border-left: 4px solid #f59e0b;">
-                <li style="margin-bottom: 8px;"><strong>All question papers</strong> - Access our complete library</li>
-                <li style="margin-bottom: 8px;"><strong>Detailed AI explanations</strong> - Understand every answer</li>
-                <li style="margin-bottom: 8px;"><strong>Unlimited practice</strong> - No restrictions on attempts</li>
-                <li style="margin-bottom: 0;"><strong>Future updates</strong> - Get new papers as they're added</li>
-              </ul>
-              
-              <h2 style="color: #1e293b; margin-top: 30px; margin-bottom: 15px; font-size: 18px;">💰 Pricing Options</h2>
-              
-              <div style="display: flex; gap: 16px; margin-bottom: 20px;">
-                <div style="flex: 1; background: white; padding: 20px; border-radius: 12px; border: 2px solid #e2e8f0; text-align: center;">
-                  <p style="margin: 0 0 8px 0; color: #64748b; font-size: 14px;">Until ${UPGRADE_CONFIG.yearlyValidity}</p>
-                  <p style="margin: 0; font-size: 28px; font-weight: 700; color: #1e293b;">${UPGRADE_CONFIG.yearlyPrice}</p>
-                </div>
+              <div style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); padding: 20px; border-radius: 12px; border: 2px solid #3b82f6; text-align: center; margin: 20px 0;">
+                <p style="margin: 0 0 8px 0; color: #1e40af; font-size: 18px; font-weight: 700;">${packageDescription}</p>
+                <p style="margin: 0; font-size: 32px; font-weight: 700; color: #1e3a8a;">PKR ${pkg.price.toLocaleString()}</p>
               </div>
               
-              <div style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 12px; border: 2px solid #f59e0b; text-align: center; margin-bottom: 20px;">
-                <p style="margin: 0 0 4px 0; color: #92400e; font-size: 12px; font-weight: 600;">⭐ BEST VALUE</p>
-                <p style="margin: 0 0 8px 0; color: #78350f; font-size: 14px;">Lifetime Access</p>
-                <p style="margin: 0; font-size: 28px; font-weight: 700; color: #78350f;">${UPGRADE_CONFIG.lifetimePrice}</p>
-                <p style="margin: 8px 0 0 0; color: #92400e; font-size: 12px;">One-time payment, never pay again!</p>
-              </div>
+              <h2 style="color: #1e293b; margin-top: 30px; margin-bottom: 15px; font-size: 18px;">📦 All Credit Packages</h2>
+              
+              <table style="width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden;">
+                <tr style="background: #f1f5f9;">
+                  <th style="padding: 12px; text-align: left; font-weight: 600;">Package</th>
+                  <th style="padding: 12px; text-align: center; font-weight: 600;">Credits</th>
+                  <th style="padding: 12px; text-align: right; font-weight: 600;">Price</th>
+                </tr>
+                ${CREDIT_PACKAGES.map(
+                  (p) => `
+                <tr style="${p.name === selectedPackage ? "background: #dbeafe;" : ""}">
+                  <td style="padding: 12px; border-top: 1px solid #e2e8f0;">${p.name}${p.name === selectedPackage ? " ✓" : ""}</td>
+                  <td style="padding: 12px; border-top: 1px solid #e2e8f0; text-align: center;">${p.credits || "Unlimited"}</td>
+                  <td style="padding: 12px; border-top: 1px solid #e2e8f0; text-align: right; font-weight: 600;">PKR ${p.price.toLocaleString()}</td>
+                </tr>
+                `
+                ).join("")}
+              </table>
               
               <h2 style="color: #1e293b; margin-top: 25px; margin-bottom: 15px; font-size: 18px;">🏦 Payment Details</h2>
               
@@ -223,23 +233,23 @@ export async function sendUpgradeInstructionsEmail(
                 </table>
               </div>
               
-              <h2 style="color: #1e293b; margin-top: 25px; margin-bottom: 15px; font-size: 18px;">📝 How to Complete Your Upgrade</h2>
+              <h2 style="color: #1e293b; margin-top: 25px; margin-bottom: 15px; font-size: 18px;">📝 How to Complete Your Purchase</h2>
               
               <ol style="padding-left: 20px;">
-                <li style="margin-bottom: 12px;">Choose your plan and transfer the amount to the account above</li>
+                <li style="margin-bottom: 12px;">Transfer <strong>PKR ${pkg.price.toLocaleString()}</strong> to the account above</li>
                 <li style="margin-bottom: 12px;">Take a screenshot of the payment confirmation</li>
-                <li style="margin-bottom: 12px;">Send the screenshot along with which plan you chose to:
+                <li style="margin-bottom: 12px;">Send the screenshot to:
                   <ul style="margin-top: 8px;">
                     <li>Email: <a href="mailto:${UPGRADE_CONFIG.contactEmail}" style="color: #2a87ff;">${UPGRADE_CONFIG.contactEmail}</a></li>
                     ${UPGRADE_CONFIG.contactWhatsApp ? `<li>WhatsApp: <a href="https://wa.me/${UPGRADE_CONFIG.contactWhatsApp.replace(/[^0-9]/g, "")}" style="color: #2a87ff;">${UPGRADE_CONFIG.contactWhatsApp}</a></li>` : ""}
                   </ul>
                 </li>
-                <li style="margin-bottom: 0;">Your account will be upgraded within 24 hours!</li>
+                <li style="margin-bottom: 0;">Your credits will be added within 24 hours!</li>
               </ol>
               
               <div style="background: #dbeafe; padding: 15px; border-radius: 8px; margin-top: 25px;">
                 <p style="margin: 0; color: #1e40af; font-size: 14px;">
-                  <strong>💡 Tip:</strong> Include your email address (${email}) in the payment reference or message so we can identify your payment quickly.
+                  <strong>💡 Tip:</strong> Include your email address (${email}) and package name (${pkg.name}) in the payment reference so we can process your order quickly.
                 </p>
               </div>
               
@@ -253,7 +263,7 @@ export async function sendUpgradeInstructionsEmail(
     });
 
     // Send notification to admin
-    await sendUpgradeNotificationToAdmin(email, userName);
+    await sendUpgradeNotificationToAdmin(email, userName, selectedPackage);
 
     return { success: true };
   } catch (error) {
@@ -356,23 +366,25 @@ export async function sendFlaggedQuestionNotification(
 }
 
 /**
- * Send notification to admin when a user requests upgrade instructions
+ * Send notification to admin when a user requests credits
  */
 async function sendUpgradeNotificationToAdmin(
   userEmail: string,
-  userName: string | null
+  userName: string | null,
+  selectedPackage: string
 ): Promise<void> {
   const timestamp = new Date().toLocaleString("en-US", {
     timeZone: "Asia/Karachi",
     dateStyle: "full",
     timeStyle: "short",
   });
+  const pkg = CREDIT_PACKAGES.find((p) => p.name === selectedPackage);
 
   try {
     await resend.emails.send({
       from: `${APP_NAME} <${FROM_EMAIL}>`,
       to: UPGRADE_CONFIG.adminEmail,
-      subject: `🔔 New Upgrade Request - ${userName || userEmail}`,
+      subject: `🎟️ Credit Request: ${selectedPackage} - ${userName || userEmail}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -382,10 +394,16 @@ async function sendUpgradeNotificationToAdmin(
           </head>
           <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-              <h1 style="color: white; margin: 0; font-size: 24px;">🔔 New Upgrade Request!</h1>
+              <h1 style="color: white; margin: 0; font-size: 24px;">🎟️ New Credit Request!</h1>
             </div>
             <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0; border-top: none;">
-              <p style="margin-top: 0; font-size: 16px;">A user has requested upgrade instructions. Here are their details:</p>
+              <p style="margin-top: 0; font-size: 16px;">A user has requested credits. Here are their details:</p>
+              
+              <div style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); padding: 15px; border-radius: 8px; border: 2px solid #3b82f6; text-align: center; margin: 20px 0;">
+                <p style="margin: 0 0 4px 0; color: #1e40af; font-size: 14px;">Selected Package</p>
+                <p style="margin: 0; font-size: 24px; font-weight: 700; color: #1e3a8a;">${selectedPackage} - PKR ${pkg?.price.toLocaleString() || "N/A"}</p>
+                ${pkg?.credits ? `<p style="margin: 4px 0 0 0; color: #3b82f6; font-size: 14px;">${pkg.credits} credits</p>` : `<p style="margin: 4px 0 0 0; color: #3b82f6; font-size: 14px;">Lifetime Access</p>`}
+              </div>
               
               <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 20px 0;">
                 <table style="width: 100%; border-collapse: collapse;">
@@ -412,10 +430,10 @@ async function sendUpgradeNotificationToAdmin(
               
               <div style="margin-top: 20px;">
                 <p style="margin: 0 0 10px 0; color: #64748b; font-size: 14px;">Quick actions:</p>
-                <a href="mailto:${userEmail}?subject=Following up on your FCPS Prep upgrade" style="display: inline-block; background: #2a87ff; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-right: 10px;">
+                <a href="mailto:${userEmail}?subject=Following up on your FCPS Prep credits" style="display: inline-block; background: #2a87ff; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-right: 10px;">
                   Email User
                 </a>
-                <a href="https://wa.me/${userEmail.includes("@") ? "" : userEmail.replace(/[^0-9]/g, "")}" style="display: inline-block; background: #25d366; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+                <a href="https://wa.me/923416110684" style="display: inline-block; background: #25d366; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
                   WhatsApp
                 </a>
               </div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLoaderData, useFetcher } from "react-router";
 import { db } from "~/db";
-import { papers, questions } from "~/db/schema";
+import { papers, questions, userUnlockedPapers } from "~/db/schema";
 import { eq } from "drizzle-orm";
 import type { Route } from "./+types/fix-questions";
 import { requireAuth } from "~/lib/require-auth.server";
@@ -17,10 +17,17 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response("Paper not found", { status: 404 });
   }
 
+  // Fetch user's unlocked papers
+  const unlockedPapersResult = await db
+    .select({ paperId: userUnlockedPapers.paperId })
+    .from(userUnlockedPapers)
+    .where(eq(userUnlockedPapers.userId, user.id));
+  const unlockedPaperIds = new Set(unlockedPapersResult.map((r) => r.paperId));
+
   // Verify user has access to this paper
-  if (!canAccessPaper(user, paper)) {
+  if (!canAccessPaper(user, paper, unlockedPaperIds)) {
     throw new Response(
-      "Access denied. Upgrade to premium to access this paper.",
+      "Access denied. Unlock this paper with credits first.",
       { status: 403 }
     );
   }

@@ -1,7 +1,13 @@
 import { Link, useLoaderData, Form, redirect } from "react-router";
 import { db } from "~/db";
-import { books, chapters, papers, testSessions } from "~/db/schema";
-import { desc, eq, asc, isNull } from "drizzle-orm";
+import {
+  books,
+  chapters,
+  papers,
+  testSessions,
+  userUnlockedPapers,
+} from "~/db/schema";
+import { desc, eq, asc } from "drizzle-orm";
 import type { Route } from "./+types/dashboard";
 import { requireAuth } from "~/lib/require-auth.server";
 import { createLogoutCookie } from "~/lib/auth.server";
@@ -13,7 +19,6 @@ interface PaperWithProgress {
   name: string;
   source: string;
   questionCount: number;
-  accessTier: "free" | "premium";
   bookId: number | null;
   chapterId: number | null;
   orderIndex: number;
@@ -67,6 +72,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     .from(papers)
     .orderBy(asc(papers.orderIndex), desc(papers.createdAt));
 
+  // Fetch user's unlocked papers
+  const unlockedPapersResult = await db
+    .select({ paperId: userUnlockedPapers.paperId })
+    .from(userUnlockedPapers)
+    .where(eq(userUnlockedPapers.userId, user.id));
+  const unlockedPaperIds = new Set(unlockedPapersResult.map((r) => r.paperId));
+
   // Fetch user's sessions
   const userSessions = await db
     .select()
@@ -100,34 +112,35 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 
   // Build paper with progress
-  const buildPaperWithProgress = (paper: typeof allPapers[0]): PaperWithProgress => {
+  const buildPaperWithProgress = (
+    paper: (typeof allPapers)[0]
+  ): PaperWithProgress => {
     const progress = getPaperProgress(paper.id);
     return {
       id: paper.id,
       name: paper.name,
       source: paper.source,
       questionCount: paper.questionCount,
-      accessTier: paper.accessTier,
       bookId: paper.bookId,
       chapterId: paper.chapterId,
       orderIndex: paper.orderIndex,
-      hasAccess: canAccessPaper(user, paper),
+      hasAccess: canAccessPaper(user, paper, unlockedPaperIds),
       ...progress,
     };
   };
 
-  // Sort papers: for free users, show free papers first
+  // Sort papers: for free users, show unlocked papers first
   const sortPapers = (papers: PaperWithProgress[]): PaperWithProgress[] => {
     if (user.subscriptionStatus === "free") {
       return [...papers].sort((a, b) => {
-        // Free papers first
-        if (a.accessTier === "free" && b.accessTier !== "free") return -1;
-        if (a.accessTier !== "free" && b.accessTier === "free") return 1;
+        // Unlocked papers first
+        if (a.hasAccess && !b.hasAccess) return -1;
+        if (!a.hasAccess && b.hasAccess) return 1;
         // Then by order index
         return a.orderIndex - b.orderIndex;
       });
     }
-    // Subscribed users: just sort by order index
+    // Lifetime users: just sort by order index
     return [...papers].sort((a, b) => a.orderIndex - b.orderIndex);
   };
 
@@ -184,9 +197,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   // Get standalone papers (not in any book)
   const standalonePapers = sortPapers(
-    allPapers
-      .filter((p) => p.bookId === null)
-      .map(buildPaperWithProgress)
+    allPapers.filter((p) => p.bookId === null).map(buildPaperWithProgress)
   );
 
   // Calculate stats
@@ -212,7 +223,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     books: booksWithContent,
     standalonePapers,
-    user,
+    user: {
+      ...user,
+      unlockedCount: unlockedPaperIds.size,
+    },
     stats: {
       totalPapers,
       totalQuestions,
@@ -249,7 +263,7 @@ function PaperCard({ paper }: { paper: PaperWithProgress }) {
   return (
     <Link
       to={`/paper/${paper.id}`}
-      className={`block px-4 py-3 mx-2 mb-2 rounded-xl transition-all ${
+      className={`block px-4 py-3 md:py-4 mx-2 mb-2 rounded-xl transition-all ${
         paper.hasAccess
           ? "bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:shadow-sm"
           : "bg-slate-50/50 dark:bg-slate-800/30 opacity-75"
@@ -257,9 +271,24 @@ function PaperCard({ paper }: { paper: PaperWithProgress }) {
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+            {!paper.hasAccess && (
+              <svg
+                className="w-4 h-4 md:w-5 md:h-5 text-amber-500 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
+            )}
             <span
-              className={`text-sm font-medium ${
+              className={`text-sm md:text-base font-medium ${
                 paper.hasAccess
                   ? "text-slate-900 dark:text-white"
                   : "text-slate-600 dark:text-slate-400"
@@ -268,35 +297,30 @@ function PaperCard({ paper }: { paper: PaperWithProgress }) {
               {paper.name}
             </span>
             {!paper.hasAccess && (
-              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded">
-                🔒 Premium
+              <span className="px-1.5 py-0.5 md:px-2 md:py-1 text-[10px] md:text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 rounded">
+                1 credit
               </span>
             )}
-            {paper.hasAccess && paper.accessTier === "free" && (
-              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-success-100 dark:bg-success-900/40 text-success-700 dark:text-success-400 rounded">
-                Free
-              </span>
-            )}
-            {paper.hasAccess && paper.latestSession?.status === "in_progress" && (
-              <span className="px-1.5 py-0.5 text-[10px] font-medium bg-warning-100 dark:bg-warning-900/40 text-warning-700 dark:text-warning-400 rounded">
-                In Progress
-              </span>
-            )}
+            {paper.hasAccess &&
+              paper.latestSession?.status === "in_progress" && (
+                <span className="px-1.5 py-0.5 md:px-2 md:py-1 text-[10px] md:text-xs font-medium bg-warning-100 dark:bg-warning-900/40 text-warning-700 dark:text-warning-400 rounded">
+                  In Progress
+                </span>
+              )}
           </div>
-          <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-3 mt-1 text-xs md:text-sm text-slate-500 dark:text-slate-400">
             <span>{paper.questionCount} Qs</span>
             {paper.hasAccess && paper.bestScore !== null && (
               <span className="text-success-600 dark:text-success-400">
-                Best: {Math.round((paper.bestScore / paper.questionCount) * 100)}%
+                Best:{" "}
+                {Math.round((paper.bestScore / paper.questionCount) * 100)}%
               </span>
             )}
           </div>
         </div>
         <svg
-          className={`w-4 h-4 shrink-0 ${
-            paper.hasAccess
-              ? "text-slate-400"
-              : "text-amber-500"
+          className={`w-4 h-4 md:w-5 md:h-5 shrink-0 ${
+            paper.hasAccess ? "text-slate-400" : "text-amber-500"
           }`}
           fill="none"
           stroke="currentColor"
@@ -318,7 +342,7 @@ export default function Dashboard() {
   const { books, standalonePapers, user, stats } =
     useLoaderData<typeof loader>();
 
-  const isSubscribed = user.subscriptionStatus === "subscribed";
+  const isLifetime = user.subscriptionStatus === "lifetime";
 
   // Check if user needs to verify email
   const needsEmailVerification = !user.emailVerified;
@@ -451,13 +475,25 @@ export default function Dashboard() {
 
             {/* User menu */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {!isSubscribed && (
+              {/* Credits badge */}
+              {!isLifetime && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-primary-50 dark:bg-primary-900/30 rounded-lg border border-primary-200 dark:border-primary-700/50">
+                  <span className="text-lg">🎟️</span>
+                  <span className="text-sm font-semibold text-primary-700 dark:text-primary-300">
+                    {user.credits}
+                  </span>
+                  <span className="text-xs text-primary-600 dark:text-primary-400 hidden sm:inline">
+                    credits
+                  </span>
+                </div>
+              )}
+              {!isLifetime && (
                 <Link
                   to="/upgrade"
                   className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-gradient-to-r from-amber-100 to-amber-50 dark:from-amber-900/40 dark:to-amber-800/30 dark:text-amber-300 border border-amber-200 dark:border-amber-700/50 rounded-lg hover:from-amber-200 hover:to-amber-100 transition-all"
                 >
                   <span>👑</span>
-                  Upgrade
+                  Get Credits
                 </Link>
               )}
               <div className="text-right hidden sm:block">
@@ -467,12 +503,12 @@ export default function Dashboard() {
                   </p>
                   <span
                     className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                      isSubscribed
+                      isLifetime
                         ? "bg-gradient-to-r from-amber-400 to-amber-500 text-amber-900"
                         : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
                     }`}
                   >
-                    {isSubscribed ? "Premium" : "Free"}
+                    {isLifetime ? "Lifetime" : "Free"}
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -508,24 +544,25 @@ export default function Dashboard() {
 
       {/* Main content */}
       <main className="max-w-5xl mx-auto px-4 py-5 sm:py-8">
-        {/* Upgrade Banner for Free Users */}
-        {!isSubscribed && (
+        {/* Credits Banner for Free Users */}
+        {!isLifetime && (
           <Link
             to="/upgrade"
-            className="block mb-6 sm:mb-8 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white hover:from-amber-600 hover:to-amber-700 transition-all group relative overflow-hidden"
+            className="block mb-6 sm:mb-8 bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-white hover:from-primary-600 hover:to-primary-700 transition-all group relative overflow-hidden"
           >
             <div className="absolute top-0 right-0 bg-white/20 backdrop-blur-sm px-3 py-1.5 rounded-bl-xl text-xs sm:text-sm font-semibold">
               🎁 First 10 users get FREE lifetime access!
             </div>
             <div className="flex items-center justify-between gap-4 mt-4 sm:mt-2">
               <div className="flex items-center gap-3 sm:gap-4">
-                <span className="text-3xl sm:text-4xl">👑</span>
+                <span className="text-3xl sm:text-4xl">🎟️</span>
                 <div>
                   <h3 className="font-bold text-lg sm:text-xl">
-                    Upgrade to Premium
+                    Get More Credits
                   </h3>
-                  <p className="text-amber-100 text-sm sm:text-base">
-                    Unlock all books and papers with detailed explanations
+                  <p className="text-primary-100 text-sm sm:text-base">
+                    Unlock papers with credits • {user.credits} credits
+                    remaining
                   </p>
                 </div>
               </div>
@@ -665,7 +702,7 @@ export default function Dashboard() {
                     </span>
                   }
                 >
-                  <div className="px-2">
+                  <div className="px-2 pt-2">
                     {/* Chapters */}
                     {book.chapters.map((chapter) => (
                       <div
@@ -674,18 +711,18 @@ export default function Dashboard() {
                       >
                         <Accordion
                           title={
-                            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                            <span className="text-sm md:text-base font-medium text-slate-800 dark:text-slate-200">
                               {chapter.name}
                             </span>
                           }
                           badge={
-                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                            <span className="text-xs md:text-sm text-slate-500 dark:text-slate-400">
                               {chapter.papers.length} papers
                             </span>
                           }
                           className="pl-4"
                         >
-                          <div className="pl-4">
+                          <div className="pl-4 pt-2">
                             {chapter.papers.map((paper) => (
                               <PaperCard key={paper.id} paper={paper} />
                             ))}
@@ -740,7 +777,7 @@ export default function Dashboard() {
                   }
                   defaultOpen={books.length === 0}
                 >
-                  <div className="px-2">
+                  <div className="px-2 pt-2">
                     {standalonePapers.map((paper) => (
                       <PaperCard key={paper.id} paper={paper} />
                     ))}

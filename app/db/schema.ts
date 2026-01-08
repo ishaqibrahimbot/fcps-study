@@ -27,12 +27,14 @@ export const users = pgTable("users", {
   emailVerified: timestamp("email_verified", { mode: "date" }),
   image: text("image"),
   passwordHash: text("password_hash"), // null for OAuth-only users
-  // Subscription fields
+  // Credits system - users unlock papers with credits
+  credits: integer("credits").notNull().default(5), // New users get 5 credits
+  // Subscription status: "free" (uses credits), "lifetime" (all papers unlocked)
   subscriptionStatus: text("subscription_status")
-    .$type<"free" | "subscribed">()
+    .$type<"free" | "lifetime">()
     .default("free")
     .notNull(),
-  subscribedAt: timestamp("subscribed_at", { mode: "date" }),
+  subscribedAt: timestamp("subscribed_at", { mode: "date" }), // When lifetime was granted
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -122,7 +124,7 @@ export const chapters = pgTable("chapters", {
 });
 
 // Papers table - represents a collection of questions (section within a chapter)
-// Papers are global (shared across all users), access is controlled by accessTier
+// Papers are global (shared across all users), access is controlled by user credits/unlocks
 export const papers = pgTable("papers", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -136,12 +138,23 @@ export const papers = pgTable("papers", {
   }),
   orderIndex: integer("order_index").notNull().default(0), // For ordering within chapter
   questionCount: integer("question_count").notNull().default(0),
-  accessTier: text("access_tier")
-    .$type<"free" | "premium">()
-    .default("premium")
-    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// User unlocked papers - tracks which papers each user has unlocked with credits
+export const userUnlockedPapers = pgTable(
+  "user_unlocked_papers",
+  {
+    userId: text("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    paperId: integer("paper_id")
+      .references(() => papers.id, { onDelete: "cascade" })
+      .notNull(),
+    unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.paperId] })]
+);
 
 // Questions table - individual MCQ questions
 export const questions = pgTable("questions", {
@@ -187,6 +200,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   accounts: many(accounts),
   sessions: many(sessions),
   testSessions: many(testSessions),
+  unlockedPapers: many(userUnlockedPapers),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -248,6 +262,20 @@ export const testSessionsRelations = relations(testSessions, ({ one }) => ({
   }),
 }));
 
+export const userUnlockedPapersRelations = relations(
+  userUnlockedPapers,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userUnlockedPapers.userId],
+      references: [users.id],
+    }),
+    paper: one(papers, {
+      fields: [userUnlockedPapers.paperId],
+      references: [papers.id],
+    }),
+  })
+);
+
 // ============================================
 // TYPE EXPORTS
 // ============================================
@@ -269,3 +297,6 @@ export type NewQuestion = typeof questions.$inferInsert;
 
 export type TestSession = typeof testSessions.$inferSelect;
 export type NewTestSession = typeof testSessions.$inferInsert;
+
+export type UserUnlockedPaper = typeof userUnlockedPapers.$inferSelect;
+export type NewUserUnlockedPaper = typeof userUnlockedPapers.$inferInsert;

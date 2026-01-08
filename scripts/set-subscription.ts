@@ -14,20 +14,22 @@ program
   .requiredOption("-e, --email <email>", "User email address")
   .requiredOption(
     "-s, --status <status>",
-    "Subscription status (free or subscribed)"
+    "Subscription status (free or lifetime)"
   )
+  .option("-c, --credits <credits>", "Credits to add (optional)", parseInt)
   .parse();
 
 const options = program.opts();
 
 async function main() {
   const email = options.email as string;
-  const status = options.status as "free" | "subscribed";
+  const status = options.status as "free" | "lifetime";
+  const creditsToAdd = options.credits as number | undefined;
 
   // Validate status
-  if (!["free", "subscribed"].includes(status)) {
+  if (!["free", "lifetime"].includes(status)) {
     console.error(
-      `\n❌ Invalid status: ${status}. Must be 'free' or 'subscribed'.`
+      `\n❌ Invalid status: ${status}. Must be 'free' or 'lifetime'.`
     );
     process.exit(1);
   }
@@ -36,6 +38,9 @@ async function main() {
   console.log("=".repeat(50));
   console.log(`Email: ${email}`);
   console.log(`Status: ${status}`);
+  if (creditsToAdd !== undefined) {
+    console.log(`Credits to add: ${creditsToAdd}`);
+  }
   console.log("=".repeat(50));
 
   // Check for database connection
@@ -56,22 +61,30 @@ async function main() {
 
   console.log(`\n👤 Found user: ${user.name || user.email}`);
   console.log(`   Current status: ${user.subscriptionStatus}`);
+  console.log(`   Current credits: ${user.credits}`);
 
   // Update subscription status
   const updateData: {
-    subscriptionStatus: "free" | "subscribed";
+    subscriptionStatus: "free" | "lifetime";
     subscribedAt?: Date | null;
+    credits?: number;
   } = {
     subscriptionStatus: status,
   };
 
-  // Set subscribedAt timestamp when upgrading to subscribed
-  if (status === "subscribed" && user.subscriptionStatus !== "subscribed") {
+  // Set subscribedAt timestamp when upgrading to lifetime
+  if (status === "lifetime" && user.subscriptionStatus !== "lifetime") {
     updateData.subscribedAt = new Date();
     console.log(`   Setting subscribedAt to now`);
   } else if (status === "free") {
     updateData.subscribedAt = null;
     console.log(`   Clearing subscribedAt`);
+  }
+
+  // Add credits if specified
+  if (creditsToAdd !== undefined) {
+    updateData.credits = user.credits + creditsToAdd;
+    console.log(`   Setting credits to ${updateData.credits}`);
   }
 
   await db.update(users).set(updateData).where(eq(users.id, user.id));
@@ -88,11 +101,12 @@ async function main() {
     console.log(`   Name: ${updatedUser.name || "(no name)"}`);
     console.log(`   Email: ${updatedUser.email}`);
     console.log(`   Status: ${updatedUser.subscriptionStatus}`);
+    console.log(`   Credits: ${updatedUser.credits}`);
     console.log(
       `   Subscribed At: ${
         updatedUser.subscribedAt
           ? updatedUser.subscribedAt.toISOString()
-          : "(not subscribed)"
+          : "(not lifetime)"
       }`
     );
   }
