@@ -19,6 +19,7 @@
     "import-book": "npx tsx scripts/import-book.ts",
     "explain": "npx tsx scripts/generate-explanations.ts",
     "explain-book": "npx tsx scripts/explain-book.ts",
+    "update-explanations": "npx tsx scripts/update-explanations.ts",
     "set-subscription": "npx tsx scripts/set-subscription.ts",
     "seed-books": "npx tsx scripts/seed-books.ts",
     "migrate-to-credits": "npx tsx scripts/migrate-to-credits.ts",

@@ -62,6 +62,10 @@ program
   )
   .option("--skip-completed", "Skip sections that already have explanations")
   .option("--section <name>", "Only process a specific section by name")
+  .option(
+    "--regenerate",
+    "Regenerate explanations for all questions (clears existing status)"
+  )
   .parse();
 
 const options = program.opts();
@@ -227,11 +231,13 @@ async function main() {
   const chaptersFilter = options.chapters as string | undefined;
   const skipCompleted = options.skipCompleted || false;
   const specificSection = options.section;
+  const regenerate = options.regenerate || false;
 
   console.log("\n🧠 Book Explanation Orchestrator");
   console.log("=".repeat(50));
   console.log(`Map file: ${mapPath}`);
   console.log(`Skip completed: ${skipCompleted}`);
+  console.log(`Regenerate: ${regenerate}`);
   console.log("=".repeat(50));
 
   // Check for API key
@@ -298,12 +304,28 @@ async function main() {
     (s) => s.section.status === "completed" && s.section.outputFile
   );
 
-  console.log(`\n📊 Sections with extracted questions: ${sectionsWithOutput.length}`);
+  console.log(
+    `\n📊 Sections with extracted questions: ${sectionsWithOutput.length}`
+  );
 
   if (sectionsWithOutput.length === 0) {
     console.error("\n❌ No sections with completed ingestion found.");
     console.log("Run ingest-book first to extract questions.");
     process.exit(1);
+  }
+
+  // When regenerating, clear explanation status for all targeted sections first
+  if (regenerate) {
+    console.log("\n🔄 Regenerate mode: clearing explanation status...");
+    for (const flatSection of sectionsWithOutput) {
+      await atomicSaveSection(mapPath, flatSection, {
+        explainedFile: undefined,
+        explanationStatus: "pending",
+        explanationCompletedAt: undefined,
+        explanationError: undefined,
+      });
+    }
+    console.log(`   Cleared status for ${sectionsWithOutput.length} sections`);
   }
 
   let completed = 0;
@@ -335,12 +357,12 @@ async function main() {
     }
 
     // Run explanation generator
-    const args = [
-      "--file",
-      section.outputFile!,
-      "--resume",
-      "--skip-existing",
-    ];
+    const args = ["--file", section.outputFile!, "--resume"];
+
+    // Only skip existing explanations if not regenerating
+    if (!regenerate) {
+      args.push("--skip-existing");
+    }
 
     console.log(`\n   Running explanation generator...\n`);
 
@@ -394,9 +416,10 @@ async function main() {
 
   if (completed > 0) {
     console.log("\n📋 Map file updated with explanation paths:", mapPath);
-    console.log("\nNext step:");
+    console.log("\nNext steps:");
+    console.log("  - New book: npm run import-book -- -m", mapPath);
     console.log(
-      "Import the book to database: npm run import-book -- -m",
+      "  - Update existing: npm run update-explanations -- -m",
       mapPath
     );
   }
@@ -411,4 +434,3 @@ main().catch((err) => {
   }
   process.exit(1);
 });
-
