@@ -96,8 +96,9 @@ CORRECT ANSWER: ${correctLabel}${question.correctChoice !== null ? `. ${question
 
 Instructions:
 1. Explain WHY the correct answer is correct
-2. Briefly explain why the other options are incorrect (1 sentence each)
-3. Keep the explanation focused, short, and exam-relevant (aim for 100-150 words)
+2. Briefly explain why the other options are incorrect (1-2 sentences each)
+3. Include any relevant clinical pearls or high-yield facts
+4. Keep the explanation focused and exam-relevant (aim for 150-250 words)
 5. Use clear medical terminology
 
 Respond with a JSON object in this exact format:
