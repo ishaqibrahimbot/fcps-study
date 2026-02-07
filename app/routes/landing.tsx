@@ -17,7 +17,7 @@ export function meta() {
     {
       name: "description",
       content:
-        "Practice FCPS Part I with curated MCQs, detailed explanations, and smart learning modes. Start with a free paper today.",
+        "Practice FCPS Part I with curated MCQs, detailed explanations, and smart learning modes. Start with 5 free papers today.",
     },
   ];
 }
@@ -74,7 +74,7 @@ export default function LandingPage() {
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 dark:bg-primary-900/30 rounded-full mb-8">
             <span className="w-2 h-2 bg-primary-500 rounded-full animate-pulse"></span>
             <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
-              Start with a free paper — no credit card required
+              Start with 5 free papers — no credit card required
             </span>
           </div>
 
@@ -153,18 +153,18 @@ export default function LandingPage() {
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
               <div>
                 <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-                  🎁 Free Paper Included
+                  🎁 5 Free Papers Included
                 </h3>
                 <p className="text-primary-100 text-lg">
-                  Every new account gets access to a complete practice paper
-                  with detailed explanations — absolutely free.
+                  Every new account gets 5 free credits to unlock any practice
+                  papers you want, with detailed explanations — absolutely free.
                 </p>
               </div>
               <Link
                 to="/signup"
                 className="shrink-0 px-8 py-4 bg-white text-primary-600 font-semibold rounded-xl hover:bg-primary-50 transition-colors shadow-lg"
               >
-                Claim Your Free Paper
+                Claim Your Free Papers
               </Link>
             </div>
           </div>
@@ -291,9 +291,9 @@ export default function LandingPage() {
               },
               {
                 step: "2",
-                title: "Access your free paper",
+                title: "Unlock your 5 free papers",
                 description:
-                  "Instantly get access to a complete practice paper with all questions and explanations.",
+                  "Use your 5 free credits to unlock any practice papers you want, complete with questions and explanations.",
               },
               {
                 step: "3",
@@ -330,7 +330,7 @@ export default function LandingPage() {
             Ready to Ace Your FCPS?
           </h2>
           <p className="text-lg text-slate-600 dark:text-slate-400 mb-10">
-            Start preparing smarter, not harder. Your free paper is waiting.
+            Start preparing smarter, not harder. Your 5 free papers are waiting.
           </p>
           <Link
             to="/signup"
@@ -352,7 +352,7 @@ export default function LandingPage() {
             </svg>
           </Link>
           <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-            No credit card required • Free paper included • Cancel anytime
+            No credit card required • 5 free papers included • Cancel anytime
           </p>
         </div>
       </section>
